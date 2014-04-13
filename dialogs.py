@@ -184,6 +184,12 @@ fitdialog = '''
                     id: fit_deg
                     text: 2
                     multiline: False
+                Label:
+                    text: 'Manually define trace?'
+                Spinner:
+                    id: manfit
+                    text: 'No'
+                    values: ['No','Yes']
         BoxLayout:
             orientation: 'horizontal'
             size_hint_y: None
@@ -203,7 +209,8 @@ class SetFitparams(Popup):
     
     def set_fit(self):
         self.fit_args = {'shape':self.ids.fit_psf.text, \
-            'wid':self.ids.fit_wid.text, 'deg':self.ids.fit_deg.text}
+            'wid':self.ids.fit_wid.text, 'deg':self.ids.fit_deg.text,\
+            'man':(self.ids.manfit.text == 'Yes')}
         self.dismiss()
     
 wdkv = '''

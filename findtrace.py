@@ -1,9 +1,10 @@
-from astropy.modeling import functional_models as fm, fitting, SummedCompositeModel
+from astropy.modeling import functional_models as fm, fitting, \
+    SummedCompositeModel, polynomial as poly
 from scipy.signal import argrelextrema, medfilt
 import numpy as np
 from robuststats import robust_mean as robm, robust_sigma as robs
 from copy import deepcopy
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, griddata
 
 
 posneg = {'pos':np.greater, 'neg':np.lower}
@@ -44,7 +45,7 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     model_init = SummedCompositeModel(models)
     return x_data, fitmethod(model_init, x_data, idata)
     
-def draw_trace(idata, x_val, fitm, fixdistort = False):
+def draw_trace(idata, x_val, fitm, fixdistort = False, fitdegree = 2):
     ns = idata.shape[1]
     midpoint = ns/2
     tc1, tc2 = midpoint, midpoint + 1
@@ -77,14 +78,25 @@ def draw_trace(idata, x_val, fitm, fixdistort = False):
             tc2 += 1
         else:
             up = False
-    apertures = zip(*apertures)
     
-    if fixdistort:
-        meds = [np.median(x) for x in apertures]
-        apertures = array([[x - med[i] for x in y] for i, y in enumerate(apertures)])
+    if not fixdistort:
+        return trace
         
-    
-    return trace
+    apertures = np.array(zip(*apertures))
+    #subtract off the position of each aperture
+    nap, ns = apertures.shape
+    meds = np.median(apertures, axis=1)
+    meds = np.repeat(meds.reshape(nap, 1), ns, axis=1)
+    apertures -= meds
+    #determine median offsets and fit with a polynomial
+    off_x = np.median(apertures, axis=0)
+    pinit = poly.Polynomial1D(fitdegree)
+    x_trace = np.arange(ns)
+    pfit = fitmethod(pinit, x_trace, off_x)
+    xp, yp = np.mgrid[0:nap, 0:ns]
+    xd, yd = xp, yp - pfit(xp)
+    fdata = griddata((xp, yp), idata, (xd, yd), method='cubic')
+    return fdata
     
     
     

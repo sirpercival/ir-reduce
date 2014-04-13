@@ -23,7 +23,7 @@ from ir_databases import InstrumentProfile, ObsRun, ObsTarget
 from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog
 from imarith import pair_dithers, im_subtract
 from robuststats import robust_mean as robm, interp_x, idlhash
-from findtrace import find_peaks, fit_multipeak
+from findtrace import find_peaks, fit_multipeak, draw_trace
 import shelve, uuid, glob, copy, re
 from os import path
 
@@ -441,13 +441,17 @@ class TracefitScreen(IRScreen):
             [x.slider.value for x in self.apertures['neg']]
         if self.trace_line in self.the_graph.plots:
             self.the_graph.remove_plot(self.trace_line)
-        self.xx, self.fmodel = fit_multipeak(self.tracepoints, npeak = len(pos), \
+        self.xx, self.fitparams['model'] = fit_multipeak(self.tracepoints, npeak = len(pos), \
             pos = pos, wid = self.fit_params['wid'], ptype = self.fit_params['shape'])
         self.trace_line.points = zip(self.xx, self.fmodel(xx))
         self.the_graph.add_plot(self.trace_line)
         
     def fix_distort(self):
-        pass
+        if not self.fit_params.get('model',False):
+            popup = WarningDialog(text='Make sure you fit the trace centers first!')
+            popup.open()
+            return
+        draw_trace(self.xx, 
     
     def extract_spectrum(self):
         pass
