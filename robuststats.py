@@ -33,3 +33,10 @@ def interp_x(points, targ_x):
     f = interp1d(x, y, kind='cubic')
     return f(targ_x)
     
+def idlhash(a, b, list = False):
+    c = np.outer(a,b)
+    if list:
+        return c.tolist()
+    return c
+    
+    

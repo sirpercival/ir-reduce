@@ -143,6 +143,8 @@ atdialog = '''
                 on_press: root.set_target()
 '''
 
+Builder.load_string(atdialog)
+
 class AddTarget(Popup):
     target_args = DictProperty({})
     instrumentlist = ListProperty([])
@@ -194,6 +196,8 @@ fitdialog = '''
                 on_press: root.set_fit()
 '''
 
+Builder.load_string(fitdialog)
+
 class SetFitparams(Popup):
     fit_args = DictProperty({})
     
@@ -202,3 +206,21 @@ class SetFitparams(Popup):
             'wid':self.ids.fit_wid.text, 'deg':self.ids.fit_deg.text}
         self.dismiss()
     
+wdkv = '''
+<WarningDialog>:
+    title: 'Oops!'
+    auto_dismiss: False
+    size_hint: 0.5, 0.3
+    BoxLayout:
+        Label:
+            text: root.text
+        Button:
+            size_hint_y: 0.2
+            text: 'OK'
+            on_press: root.dismiss()
+'''
+
+Builder.load_string(wdkv)
+
+class WarningDialog(Popup):
+    text = StringProperty('')

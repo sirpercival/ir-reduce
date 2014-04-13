@@ -20,9 +20,9 @@ from imagepane import ImagePane, default_image
 from fitsimage import FitsImage
 from comboedit import ComboEdit
 from ir_databases import InstrumentProfile, ObsRun, ObsTarget
-from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams
+from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog
 from imarith import pair_dithers, im_subtract
-from robuststats import robust_mean as robm, interp_x
+from robuststats import robust_mean as robm, interp_x, idlhash
 from findtrace import find_peaks, fit_multipeak
 import shelve, uuid, glob, copy, re
 from os import path
@@ -353,34 +353,38 @@ class TracefitScreen(IRScreen):
     tracepoints = ListProperty([])
     trace_axis = NumericProperty(0)
     fit_params = DictProperty({})
+    trace_line = MeshLinePlot(color=[0,0,1,0])
     
     def set_imagepair(self, val):
         pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
         if not path.isfile(fitsfile):
-            popup = Popup(title='Oops!', content=Label('You have to select an extraction'\
-                'region for this image pair \nbefore you can move on to this step.'), \
-                size_hint=(0.6, 0.4))
+            popup = WarningDialog(text='You have to select an extraction'\
+                'region for this image pair \nbefore you can move on to this step.')
             popup.open()
             return
         self.current_impair = FitsImage(fitsfile)
         region = self.current_impair.get_header_keyword(['EXREG' + x for x in ['X1','Y1','X2','Y2']])
         if not any(region):
-            popup = Popup(title='Oops!', content=Label('You have to select an extraction'\
-                'region for this image pair \nbefore you can move on to this step.'), \
-                size_hint=(0.6, 0.4))
+            popup = WarningDialog(text='You have to select an extraction'\
+                'region for this image pair \nbefore you can move on to this step.')
             popup.open()
             return
         self.current_impair.load()
         idata = ''.join(map(chr,self.current_impair.scaled))
         self.itexture.blit_buffer(idata, colorfmt='luminance', bufferfmt='ubyte', \
             size = self.current_impair.dimensions)
+        self.trace_axis = 0 if get_tracedir(self.current_target.instrument_id) == 'vertical' else 1
         self.extractregion = self.current_impair.data_array[region[1]:region[3]+1,region[0]:region[2]+1]
+        if not self.trace_axis:
+            self.extractregion = self.extractregion.transpose()
+            self.trace_axis = 1
+            region = [region[x] for x in [1, 0, 3, 2]]
         region[2] = region[2] - region[0]
         region[3] = region[3] - region[1]
         self.iregion = self.itexture.get_region(*region)
-        self.trace_axis = 0 if get_tracedir(self.current_target.instrument_id) == 'vertical' else 1
-        self.tracepoints = robm(self.extractregion, axis = self.trace_axis)
+        dims = idlhash(self.extractregion.shape,[0.4,0.6], list=True)
+        self.tracepoints = robm(self.extractregion[dims[0],dims[1]], axis = self.trace_axis)
         self.tplot.points = zip(range(len(tracepoints.tolist())), tracepoints.tolist())
         self.drange = [nanmin(self.tracepoints), nanmax(self.tracepoints)]
         self.ids.the_graph.add_plot(self.tplot)
@@ -429,7 +433,18 @@ class TracefitScreen(IRScreen):
         popup.open()
         
     def fit_trace(self):
-        pass
+        if not self.fit_params:
+            popup = WarningDialog(text='Make sure you set up your fit parameters!')
+            popup.open()
+            return
+        pos = [x.slider.value for x in self.apertures['pos']] + \
+            [x.slider.value for x in self.apertures['neg']]
+        if self.trace_line in self.the_graph.plots:
+            self.the_graph.remove_plot(self.trace_line)
+        self.xx, self.fmodel = fit_multipeak(self.tracepoints, npeak = len(pos), \
+            pos = pos, wid = self.fit_params['wid'], ptype = self.fit_params['shape'])
+        self.trace_line.points = zip(self.xx, self.fmodel(xx))
+        self.the_graph.add_plot(self.trace_line)
         
     def fix_distort(self):
         pass
