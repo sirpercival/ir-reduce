@@ -1,5 +1,6 @@
 #:kivy 1.8.0
 #:import Factory kivy.factory.Factory
+#:import re re
 
 <ActionSpinnerOptions@SpinnerOption>
     background_color: .4, .4, .4, 1
@@ -76,6 +77,98 @@
                 padding: '8dp'
                 size_hint: (1, 1) if root.fullscreen else (.9, None)
                 height: self.height if root.fullscreen else self.minimum_height
+                
+<WavecalScreen>:
+    name: 'wavecal'
+    id: wvscreen
+    paths: app.current_paths
+    speclist: [re.sub('.fits','',x.fitsfile) for x in app.current_target.images]
+    BoxLayout:
+        orientation: 'vertical'
+        Graph:
+            id: specdisplay
+            size_hint_y: 0.6
+            xlabel: 'Wavelength'
+            ylabel: 'Counts'
+            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_major: int((root.wmax-root.wmin)/5.)
+            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_major: int((root.dmax - root.dmin) / 5.)
+            x_grid_label: True
+            y_grid_label: True
+            xlog: False
+            ylog: False
+            x_grid: False
+            y_grid: False
+            xmin: root.wmin
+            xmax: root.wmax
+            ymin: root.dmin
+            ymax: root.dmax
+            label_options: {'bold': True}
+        GridLayout:
+            cols: 2
+            size_hint_y: 0.4
+            BoxLayout:
+                orientation: 'vertical
+                Spinner:
+                    id: specspin
+                    text: 'Choose a spectrum'
+                    values: root.speclist
+                    on_text: root.set_spectrum(self.text)
+                Label:
+                   text: 'Expected wavelength range:'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    Label:
+                        text: 'Min:'
+                    TextInput:
+                        id: rmin
+                        text: root.wmin
+                        on_focus: if not self.focus: root.set_wmin(self.text)
+                    Label:
+                        text: 'Max:'
+                    TextInput:
+                        id: rmin
+                        text: root.wmax
+                        on_focus: if not self.focus: root.set_wmax(self.text)
+                BoxLayout:
+                    orientation: 'horizontal'
+                    Button:
+                        text: 'Calibrate'
+                        on_press: root.wavecal()
+                    Button:
+                        text: 'Save Spectrum'
+                        on_press: root.save_spectrum()
+            BoxLayout:
+                orientation: 'vertical'
+                ComboEdit:
+                    id: linelist
+                    multiline: False
+                    text: 'Reference line list'
+                    options: root.linelist_buttons
+                    on_focus: if not self.focus: root.set_linelist(self.text)
+                BorderBox:
+                    size_hint_y: 0.5
+                    BoxLayout:
+                        orientation: 'vertical'
+                        ToggleButton:
+                            id: lampcal
+                            text: 'Use lamp calibrations'
+                            group: 'caltype'
+                            state: 'down'
+                        ToggleButton:
+                            text: 'Use sky lines'
+                            group: 'caltype'
+                            state: 'down'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    Label:
+                        text: '# of iterations:'
+                    TextInput:
+                        id: numiter
+                        text: root.iters
+                            
+        
 
 <TracefitScreen>:
     name: 'trace'

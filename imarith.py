@@ -27,6 +27,16 @@ def im_divide(im1, im2, outputfile = None):
     im_write(outputfile, outputimage, finalheader)
     return finalheader, outputimg
 
+def im_minimum(im1, im2, outputfile = None):
+    if im1.header:
+        finalheader = im1.header
+    outputimg = fmin(im1, im2)
+    im_write(outputfile, outputimg, finalheader)
+    return, finalheader, outputimg
+
+def minmax(data):
+    return nanmin(data), nanmax(data)
+
 def im_subtract(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header

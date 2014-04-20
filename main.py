@@ -19,16 +19,18 @@ from kivy.graphics.texture import Texture
 from imagepane import ImagePane, default_image
 from fitsimage import FitsImage
 from comboedit import ComboEdit
-from ir_databases import InstrumentProfile, ObsRun, ObsTarget
-from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog
-from imarith import pair_dithers, im_subtract
+from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
+from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace
+from imarith import pair_dithers, im_subtract, im_minimum, minmax
 from robuststats import robust_mean as robm, interp_x, idlhash
-from findtrace import find_peaks, fit_multipeak, draw_trace
+from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
+from calib import calibrate_wavelength
 import shelve, uuid, glob, copy, re
 from os import path
 
 instrumentdb = 'storage/instrumentprofiles'
 obsrundb = 'storage/observingruns'
+linelistdb = 'storage/linelists'
 
 def get_tracedir(inst):
     idb = shelve.open(instrumentdb)
@@ -49,7 +51,7 @@ class BorderBox(BoxLayout):
         if self.the_container:
             return self.the_container.remove_widget(widget)
         return super(BorderBox, self).remove_widget(widget)
-        
+
 class ObsfileInsert(BoxLayout):
     obsfile = ObjectProperty(None)
     dithertype = StringProperty('')
@@ -218,13 +220,13 @@ class ObservingScreen(IRScreen):
         caltype = self.ids.caltypes.text
         flist = self.ids.calfiles.text
         if caltype == 'Flats (lamps ON)':
-            self.current_obsnight.flaton = self.current_obsnight.add_stack('flats-on', flist, \
+            self.current_obsnight.flaton = image_stack(flist, self.current_obsnight.filestub, \
                 output=self.current_obsnight.date+'-FlatON.fits')
         elif caltype == 'Flats (lamps OFF)':
-            self.current_obsnight.flatoff = self.current_obsnight.add_stack('flats-off', flist, \
+            self.current_obsnight.flatoff = image_stack(flist, self.current_obsnight.filestub, \
                 output=self.current_obsnight.date+'-FlatOFF.fits')
         elif caltype == 'Arc Lamps':
-            self.current_obsnight.cals = self.current_obsnight.add_stack('cals', flist, \
+            self.current_obsnight.cals = image_stack(flist, self.current_obsnight.filestub, \
                 output=self.current_obsnight.date+'-Wavecal.fits')
     
     def save_night(self):
@@ -245,7 +247,7 @@ class ObservingScreen(IRScreen):
         popup.open()
     
     def update_targets(self, targs):
-        self.current_target = ObsTarget(targs)
+        self.current_target = ObsTarget(targs, night=self.current_obsnight)
         self.current_obsnight.add_target(self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
         self.ids.targs.text = self.current_target.id
@@ -340,7 +342,7 @@ class ExtractRegionScreen(IRScreen):
         self.current_impair.update_fits()
 
 class TracefitScreen(IRScreen):
-    paths = ListProperty([])
+    paths = DictProperty([])
     itexture = ObjectProperty(Texture.create(size = (2048, 2048)))
     iregion = ObjectProperty(None)
     current_impair = ObjectProperty(None)
@@ -353,10 +355,10 @@ class TracefitScreen(IRScreen):
     tracepoints = ListProperty([])
     trace_axis = NumericProperty(0)
     fit_params = DictProperty({})
-    trace_line = MeshLinePlot(color=[0,0,1,0])
+    trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,0]),MeshLinePlot(color=[0,1,1,0])])
     
     def set_imagepair(self, val):
-        pair_index = self.pairstrings.index(val)
+        self.pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
         if not path.isfile(fitsfile):
             popup = WarningDialog(text='You have to select an extraction'\
@@ -364,8 +366,8 @@ class TracefitScreen(IRScreen):
             popup.open()
             return
         self.current_impair = FitsImage(fitsfile)
-        region = self.current_impair.get_header_keyword(['EXREG' + x for x in ['X1','Y1','X2','Y2']])
-        if not any(region):
+        self.region = self.current_impair.get_header_keyword(['EXREG' + x for x in ['X1','Y1','X2','Y2']])
+        if not any(self.region):
             popup = WarningDialog(text='You have to select an extraction'\
                 'region for this image pair \nbefore you can move on to this step.')
             popup.open()
@@ -375,18 +377,20 @@ class TracefitScreen(IRScreen):
         self.itexture.blit_buffer(idata, colorfmt='luminance', bufferfmt='ubyte', \
             size = self.current_impair.dimensions)
         self.trace_axis = 0 if get_tracedir(self.current_target.instrument_id) == 'vertical' else 1
-        self.extractregion = self.current_impair.data_array[region[1]:region[3]+1,region[0]:region[2]+1]
+        reg = self.region
+        self.extractregion = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         if not self.trace_axis:
             self.extractregion = self.extractregion.transpose()
             self.trace_axis = 1
-            region = [region[x] for x in [1, 0, 3, 2]]
-        region[2] = region[2] - region[0]
-        region[3] = region[3] - region[1]
-        self.iregion = self.itexture.get_region(*region)
+            self.region = [self.region[x] for x in [1, 0, 3, 2]]
+        reg = self.region[:]
+        reg[2] = reg[2] - reg[0]
+        reg[3] = reg[3] - reg[1]
+        self.iregion = self.itexture.get_region(*reg)
         dims = idlhash(self.extractregion.shape,[0.4,0.6], list=True)
         self.tracepoints = robm(self.extractregion[dims[0],dims[1]], axis = self.trace_axis)
         self.tplot.points = zip(range(len(tracepoints.tolist())), tracepoints.tolist())
-        self.drange = [nanmin(self.tracepoints), nanmax(self.tracepoints)]
+        self.drange = minmax(self.tracepoints)
         self.ids.the_graph.add_plot(self.tplot)
     
     def add_postrace(self):
@@ -437,31 +441,155 @@ class TracefitScreen(IRScreen):
             popup = WarningDialog(text='Make sure you set up your fit parameters!')
             popup.open()
             return
-        pos = [x.slider.value for x in self.apertures['pos']] + \
-            [x.slider.value for x in self.apertures['neg']]
-        if self.trace_line in self.the_graph.plots:
-            self.the_graph.remove_plot(self.trace_line)
-        self.xx, self.fitparams['model'] = fit_multipeak(self.tracepoints, npeak = len(pos), \
-            pos = pos, wid = self.fit_params['wid'], ptype = self.fit_params['shape'])
+        pos = {'pos':[x.slider.value for x in self.apertures['pos']], \
+            'neg':[x.slider.value for x in self.apertures['neg']]}
+        for x in self.trace_lines:
+            if x in self.the_graph.plots:
+                self.the_graph.remove_plot(x)
+        if self.fit_params.get('man',False):
+            popup = DefineTrace(npos=len(self.apertures['pos']), \
+                nneg=len(self.apertures['neg']), imtexture = self.iregion)
+            popup.bind(on_dismiss = self.manual_trace(popup.tracepoints))
+            popup.open()
+            return
+        self.xx, self.fitparams['pmodel'], self.fitparams['nmodel'] = \
+            fit_multipeak(self.tracepoints, pos = pos, wid = self.fit_params['wid'], \
+            ptype = self.fit_params['shape'])
         self.trace_line.points = zip(self.xx, self.fmodel(xx))
         self.the_graph.add_plot(self.trace_line)
         
     def fix_distort(self):
-        if not self.fit_params.get('model',False):
+        if not (self.fit_params.get('pmodel',False) or \
+            self.fit_params.get('nmodel',False)):
             popup = WarningDialog(text='Make sure you fit the trace centers first!')
             popup.open()
             return
-        draw_trace(self.xx, 
+        pdistort, ndistort = draw_trace(self.extractregion, self.xx, self.fitparams['pmodel'], \
+            self.fitparams['nmodel'], fixdistort = True, fitdegree = self.fitparams['deg'])
+        the_app = App.get_running_app()
+        
+        im1, im2 = [x.load() for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1.data_array = undistort_imagearray(im1.data_array, pdistort)
+        im2.data_array = undistort_imagearray(im2.data_array, ndistort)
+        im_subtract(im1, im2, outfile=self.current_impair.fitsfile)
+        tmp = self.current_impair
+        self.current_impair = FitsImage(self.current_impair.fitsfile)
+        self.current_impair.header['EXREGX1'] = (tmp.get_header_keyword('EXREGX1'), 'extraction region coordinate X1')
+        self.current_impair.header['EXREGY1'] = (tmp.get_header_keyword('EXREGY1'), 'extraction region coordinate Y1')
+        self.current_impair.header['EXREGX2'] = (tmp.get_header_keyword('EXREGX2'), 'extraction region coordinate X2')
+        self.current_impair.header['EXREGY2'] = (tmp.get_header_keyword('EXREGY2'), 'extraction region coordinate Y2')
+        self.current_impair.update_fits()
+        self.set_imagepair(self.pairstrings[self.pair_index])
+        self.fit_params['nmodel'] = None
+        self.fit_params['pmodel'] = None
+        
+    
+    def manual_trace(self, traces):
+        pass #need to figure out how to apply these
     
     def extract_spectrum(self):
+        if not (self.fit_params.get('pmodel',False) or \
+            self.fit_params.get('nmodel',False)):
+            popup = WarningDialog(text='Make sure you fit the trace centers first!')
+            popup.open()
+            return
+        
+        #need a calibration, too
+        the_app = App.get_running_app()
+        self.lamp = None
+        if the_app.current_night.cals:
+            self.lamp = the_app.current_night.cals.data_array
+            self.lamp = self.lamp[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        im1, im2 = [x.load() for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1.data_array = undistort_imagearray(im1.data_array, pdistort)
+        im2.data_array = undistort_imagearray(im2.data_array, ndistort)
+        tmp, self.tell = im_minimum(im1.data_array, im2.data_array)
+        self.tell = self.tell[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        self.pextract = extract(self.fit_params['pmodel'], self.extractregion, self.tell, 'pos', lamp = self.lamp)
+        self.nextract = extract(self.fit_params['nmodel'], self.extractregion, self.tell, 'neg', lamp = self.lamp)
+        
+        #write uncalibrated spectra to fits files (will update after calibration)
+        #no seriously write this part
+        
+class WavecalScreen(IRScreen):
+    paths = DictProperty([])
+    wmin = NumericProperty(0)
+    wmax = NumericProperty(1024)
+    dmin = NumericProperty(0)
+    dmax = NumericProperty(0)
+    speclist = ListProperty([]) #set via app?
+    spec_index = NumericProperty(0)
+    current_spectrum = ObjectProperty(None)
+    linelist = StringProperty('')
+    linelist_buttons = ListProperty([])
+    
+    def on_enter(self):
+        lldb = shelve.open(
+        self.linelist_buttons = [Button(text=x, size_hint_y = None, height = 30) \
+            for x in self.obsrun_list]
+    
+    def set_spectrum(self, spec):
+        self.spec_index = self.speclist.index(spec)
+        if self.current_spectrum:
+            self.ids.specdisplay.remove_plot(self.current_spectrum.plot)
+        self.current_spectrum = ExtractedSpectrum(self.paths['out']+self.speclist[self.spec_index] + '.fits')
+        self.current_spectrum.plot = MeshLinePlot(color=[.9,1,1,1])
+        if not self.current_spectrum.wav:
+            self.wmin = 0
+            self.wmax = len(self.current_spectrum.spec)-1
+            self.current_spectrum.wav = range(self.wmax)
+        else:
+            self.wmin = self.current_spectrum.wav[0]
+            self.wmax = self.current_spectrum.wav[-1]
+        self.dmin, self.dmax = minmax(self.current_spectrum.spec)
+        self.current_spectrum.plot.points = zip(self.current_spectrum.wav, self.current_spectrum.spec)
+        self.ids.specdisplay.add_plot(self.current_spectrum.plot)
+            
+    def set_wmin(self, val):
+        self.wmin = val
+    
+    def set_wmax(self, val):
+        self.wmax = val
+    
+    def set_linelist(self, val):
+        self.linelist = val
+    
+    def wavecal(self):
+        if not self.linelist:
+            popup = WarningDialog(text="Please select a line list first.")
+            popup.open()
+            return
+        calfile = self.paths['cal'] + self.speclist[self.spec_index]
+        if self.ids.lampcal.state == 'down':
+            calfile += '-lamp.fits'
+        else:
+            calfile += '-sky.fits'
+        try:
+            calib = ExtractedSpectrum(calfile)
+        except:
+            popup = WarningDialog(text="You don't have a calibration of this type...")
+            popup.open()
+            return
+        niter = self.ids.numiter.text
+        self.calibration = calibrate_wavelength(calib, self.linelist, (self.wmin, self.wmax), niter)
+        
+    
+    def save_spectrum(self):
         pass
         
+            
+class CombineScreen(IRScreen):
+    pass
+
+class TelluricScreen(IRScreen):
+    pass
 
 class IRReduceApp(App):
     current_title = StringProperty('')
     index = NumericProperty(-1)
     screen_names = ListProperty([])
     extract_pairs = ListProperty([])
+    current_night = ObjectProperty(None)
     current_target = ObjectProperty(None)
     current_paths = DictProperty({})
     current_impair = ObjectProperty(None)
