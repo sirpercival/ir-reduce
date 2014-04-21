@@ -21,7 +21,7 @@ from fitsimage import FitsImage
 from comboedit import ComboEdit
 from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
 from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace
-from imarith import pair_dithers, im_subtract, im_minimum, minmax
+from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits
 from robuststats import robust_mean as robm, interp_x, idlhash
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
@@ -509,7 +509,21 @@ class TracefitScreen(IRScreen):
         self.nextract = extract(self.fit_params['nmodel'], self.extractregion, self.tell, 'neg', lamp = self.lamp)
         
         #write uncalibrated spectra to fits files (will update after calibration)
-        #no seriously write this part
+        pstub = self.paths['out'] + re.sub('.fits','-ap%i',im1.fitsfile)
+        ext = ('.fits','-sky.fits','-lamp.fits')
+        h = im1.header
+        for i, p_ap in enumerate(self.pextract):
+            for j in range(p_ap.shape[1]):
+                spec = p_ap[:,j]
+                write_fits((pstub + ext[i]) % j, h, spec)
+        
+        nstub = self.paths['out'] + re.sub('.fits','-ap%i',im2.fitsfile)
+        h = im2.header
+        for i, n_ap in enumerate(self.nextract):
+            for j in range(n_ap.shape[1]):
+                spec = n_ap[:,j]
+                write_fits((nstub + ext[i]) % j, h, spec)
+        
         
 class WavecalScreen(IRScreen):
     paths = DictProperty([])
@@ -539,8 +553,8 @@ class WavecalScreen(IRScreen):
             self.wmax = len(self.current_spectrum.spec)-1
             self.current_spectrum.wav = range(self.wmax)
         else:
-            self.wmin = self.current_spectrum.wav[0]
-            self.wmax = self.current_spectrum.wav[-1]
+            self.wmin = self.current_spectrum.wav.min()
+            self.wmax = self.current_spectrum.wav.max()
         self.dmin, self.dmax = minmax(self.current_spectrum.spec)
         self.current_spectrum.plot.points = zip(self.current_spectrum.wav, self.current_spectrum.spec)
         self.ids.specdisplay.add_plot(self.current_spectrum.plot)
@@ -572,10 +586,15 @@ class WavecalScreen(IRScreen):
             return
         niter = self.ids.numiter.text
         self.calibration = calibrate_wavelength(calib, self.linelist, (self.wmin, self.wmax), niter)
-        
+        for i, w in self.calibration.parameters:
+            self.current_spectrum.header['WAVECAL%i'%i] = (w, 'Wavelength calibration coefficient')
+        self.current_spectrum.wav = self.calibration(range(len(self.current_spectrum.spec)))
+        self.wmin = self.current_spectrum.wav.min()
+        self.wmax = self.current_spectrum.wav.max()
+        self.current_spectrum.plot.points = zip(self.current_spectrum.wav, self.current_spectrum.spec)
     
     def save_spectrum(self):
-        pass
+        self.current_spectrum.update_fits()
         
             
 class CombineScreen(IRScreen):

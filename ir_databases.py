@@ -1,8 +1,7 @@
 import re
 from imarith import medcombine
 from fitsimage import FitsImage
-import tables as tb
-from numpy import dtype
+from numpy import dtype, vstack
 from astropy.io import fits
 
 placeholder = '#'
@@ -34,27 +33,10 @@ def parse_filestring(filestring, stub, dithers = []):
     
 def image_stack(flist, stub, output = 'imstack.fits'):
     imlist = parse_filestring(flist, stub)
-    comb = medcombine(fitsfiles, outputfiles = output)
+    comb = medcombine(imlist, outputfile = output)
     tmp = FitsImage(output)
     tmp.flist = flist
     return tmp
-
-def establish_hdf(output_path = '/', obsrunid = 'observing_run'):
-    '''Grab the hdf5 file for this path; if it doesn't exist, create it.'''
-    try:
-        h5file = tb.open_file(output_path + obsrunid + '.h5', \
-            mode = 'r+', title = 'Observing Run '+obsrunid)
-        return h5file
-    except:
-        pass
-        
-    h5file = tb.open_file(output_path + obsrunid + '.h5', \
-        mode = 'w', title = 'Observing Run '+obsrunid)
-    group = h5file.create_group("/", "obsnight", "Nights of Observing")
-    
-    #use compound, nested dtypes to create the heirarchy
-    # --> lowest level first
-        
     
 class ObsTarget(object):
     def __init__(self, **kwargs):
@@ -96,12 +78,14 @@ class ExtractedSpectrum(object):
         hdu = hdul[0]
         self.header = hdu.header
         self.spec = hdu.data
+        if len(self.spec.shape) == 2:
+            self.wav = self.spec[0,:]
+            self.spec = self.spec[1,:]
         hdu.close()
-        if 'CRVAL' in self.header:
-            pass #disentangle wav and spec
         
     def update_fits(self):
-        fits.update(self.file, self.data, self.header)
+        data = vstack((self.wav,self.spec)) if self.wav else self.spec
+        fits.update(self.file, data, self.header)
 
 class ObsNight(object):
     def __init__(self, **kwargs):
