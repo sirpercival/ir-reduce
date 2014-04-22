@@ -1,6 +1,11 @@
 from astropy.io import fits
 from astropy.modeling import functional_models as fm, fitting
 from numpy import *
+from scipy.constants import golden
+from scipy.interpolate import interp1d
+from scipy.signal import medfilt
+from colorsys import hsv_to_rgb
+from random import random
 
 def grab_image_stack(imlist):
     images = []
@@ -60,6 +65,30 @@ def medcombine(fitslist, outputfile = None):
     medimage = median(images, axis=0)
     im_write(outputfile, medimage, finalheader)
     return finalheader, medimage
+
+def scale_spec(ref, spec):
+    xref, yref = ref
+    xspec, yspec = spec
+    yint = interp1d(xspec,yspec)(xref)
+    p_init = fm.Linear1D(slope=1, intercept=0)
+    fit = fitting.NonLinearLSQFitter()
+    p = fit(p_init, yint, yref)
+    return [xref, p(yint)]
+
+def combine_spectra(specs, method):
+    first_pass = np.median(specs, axis=0)
+    if method == 'median':
+        return first_pass.tolist()
+    smooth = medfilt(first_pass, kernel_size=5)
+    weights = []
+    for s in specs:
+        tmp = power(s - smooth, 2)
+        tmp = clip(tmp, min=0.5, max=tmp.max())
+        weights.append(reciprocal(tmp))
+    tot = weights.sum(axis=0)
+    weighted = [s * weights[i] / tot for i, s in enumerate(specs)]
+    return weighted.sum(axis=0)
+    
     
 def pair_dithers(ditherlist):
     a = [i for i, x in enumerate(ditherlist) if x == 'A']
@@ -77,4 +106,11 @@ def write_fits(outputfile, header, data):
         return
     outfits = fits.PrimaryHDU(data, header=header)
     outfits.writeto(outputfile)
-
+    
+def gen_colors(n):
+    '''generate a list of dissimilar colors'''
+    h = random()
+    for x in xrange(n):
+        h += golden
+        h %= 1
+        yield hsv_to_rgb(h, 0.99, 0.99)

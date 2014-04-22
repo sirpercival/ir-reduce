@@ -21,7 +21,7 @@ from fitsimage import FitsImage
 from comboedit import ComboEdit
 from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
 from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace
-from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits
+from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, scale_spec, combine_spectra
 from robuststats import robust_mean as robm, interp_x, idlhash
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
@@ -59,6 +59,11 @@ class ObsfileInsert(BoxLayout):
     def launch_header(self):
         header_viewer = FitsHeaderDialog(fitsimage = obsfile)
         header_viewer.open()
+
+class SpecscrollInsert(BoxLayout):
+    active = BooleanProperty(True)
+    text = StringProperty('')
+    spectrum = ObjectProperty(MeshLinePlot())
 
 class ApertureSlider(BoxLayout):
     aperture_line = ObjectProperty(None)
@@ -260,7 +265,7 @@ class ObservingScreen(IRScreen):
         self.ids.obsfiles.clear_widgets()
         self.file_list = []
         for file, dither in zip(self.current_target.images, self.current_target.dither):
-            tmp = ObsfileInsert(obsfile = file, dithertype = dither)
+            tmp = ObsfileInsert(obsfile = self.current_obsnight.rawpath+file, dithertype = dither)
             self.file_list.append(tmp)
             self.ids.obsfiles.add_widget(tmp)
     
@@ -535,18 +540,27 @@ class WavecalScreen(IRScreen):
     spec_index = NumericProperty(0)
     current_spectrum = ObjectProperty(None)
     linelist = StringProperty('')
+    linelists = ListProperty([])
     linelist_buttons = ListProperty([])
     
     def on_enter(self):
-        lldb = shelve.open(
+        lldb = shelve.open('storage/linelists')
+        self.linelists = lldb.keys()
         self.linelist_buttons = [Button(text=x, size_hint_y = None, height = 30) \
-            for x in self.obsrun_list]
+            for x in lldb]
+        lldb.close()
     
     def set_spectrum(self, spec):
         self.spec_index = self.speclist.index(spec)
+        try:
+            tmp = ExtractedSpectrum(self.paths['out']+self.speclist[self.spec_index] + '.fits')
+        except:
+            popup = WarningDialog(text="You haven't extracted that spectrum yet!")
+            popup.open()
+            return
         if self.current_spectrum:
             self.ids.specdisplay.remove_plot(self.current_spectrum.plot)
-        self.current_spectrum = ExtractedSpectrum(self.paths['out']+self.speclist[self.spec_index] + '.fits')
+        self.current_spectrum = tmp
         self.current_spectrum.plot = MeshLinePlot(color=[.9,1,1,1])
         if not self.current_spectrum.wav:
             self.wmin = 0
@@ -585,7 +599,13 @@ class WavecalScreen(IRScreen):
             popup.open()
             return
         niter = self.ids.numiter.text
-        self.calibration = calibrate_wavelength(calib, self.linelist, (self.wmin, self.wmax), niter)
+        if self.linelist in self.linelists:
+            lldb = shelve.open('storage/linelists')
+            linelist_path = lldb[self.lineslist]
+            lldb.close()
+        else:
+            linelist_path = self.linelist
+        self.calibration = calibrate_wavelength(calib, linelist_path, (self.wmin, self.wmax), niter)
         for i, w in self.calibration.parameters:
             self.current_spectrum.header['WAVECAL%i'%i] = (w, 'Wavelength calibration coefficient')
         self.current_spectrum.wav = self.calibration(range(len(self.current_spectrum.spec)))
@@ -598,7 +618,78 @@ class WavecalScreen(IRScreen):
         
             
 class CombineScreen(IRScreen):
-    pass
+    speclist = ListProperty([])
+    paths = DictProperty({})
+    wmin = NumericProperty(0)
+    wmax = NumericProperty(1024)
+    dmin = NumericProperty(0)
+    dmax = NumericProperty(0)
+    combined_spectrum = ObjectProperty(MeshLinePlot(color=[1,1,1,1]))
+    the_specs = ListProperty([])
+    spec_inserts = ListProperty([])
+    comb_method = StringProperty('median')
+    scaled_spectra = ListProperty([])
+    
+    def on_enter(self):
+        flist = [x for x in glob.iglob(self.paths['out'] + y + '-ap*.fits') for y in self.speclist]
+        self.the_specs = [ExtractedSpectrum(x) for x in flist]
+        colors = gen_colors(len(self.the_specs))
+        for i, ts in enumerate(self.the_specs):
+            tmp = SpecscrollInsert(text=flist[i])
+            tmp.spectrum.color = colors[i] + (1)
+            tmp.bind(active=toggle_spectrum(i)
+            if not ts.wav:
+                tmp.active = False
+                self.scaled_spectra.append([xrange(len(ts.spec)),ts.spec])
+                tmp.spectrum.points = zip(*self.scaled_spectra[i])
+                self.spec_inserts.append(tmp)
+                continue
+            self.scaled_spectra.append([ts.wav,ts.spec])
+            tmp.spectrum.points = zip(*self.scaled_spectra[i])
+            tmp.bind(active=toggle_spectrum(i)
+            self.ids.multispec.add_plot(tmp.spectrum)
+            self.spec_inserts.append(tmp)
+        self.setminmax()
+        self.comb_method.dispatch()
+        if not self.combined_spectrum in self.ids.combspec.plots:
+            self.ids.combspec.add_plot(self.combined_spectrum)
+        
+    def setminmax(self):
+        mmx = [[ts.wav.min(), ts.wav.max(), ts.spec.min(), ts.spec.max()] \
+            for i, ts in enumerate(self.the_specs) if self.spec_inserts[i].active]
+        mmx = zip(*mmx)
+        self.wmin, self.wmax = min(mmx[0]), max(mmx[1])
+        self.dmin, self.dmax = min(mmx[2]), max(mmx[3])
+        
+    
+    def toggle_spectrum(self, ind):
+        insert = self.spec_inserts[ind]
+        if insert.active:
+            self.ids.multispec.add_plot(insert.spectrum)
+        else:
+            self.ids.multispec.remove_plot(insert.spectrum)
+        self.comb_method.dispatch()
+        self.setminmax()
+    
+    def set_scale(self, spec):
+        self.ind = self.speclist.index(spec)
+        ref = (self.the_specs[self.ind].wav, self.the_specs[self.ind].spec)
+        for i, s in enumerate(self.the_specs):
+            self.scaled_spectra[i] = [s.wav, s.spec] if i == self.ind else \
+                scale_spec(ref, [s.wav, s.spec])
+            self.spec_inserts[i].spectrum.points = zip(*self.scaled_spectra[i])
+        self.comb_method.dispatch()
+        self.setminmax()
+    
+    def on_comb_method(self, instance, value):
+        specs = [x[1] for i, x in enumerate(self.scaled_spectra) if self.spec_inserts[i].active]
+        comb = combine_spectra(specs, value)
+        self.combined_spectrum.points = zip(self.scaled_spectra[self.ind][0], comb)
+    
+    def combine(self):
+        out = self.ids.savefile.text
+        h = self.the_specs[self.ind].header
+        write_fits(out, h, zip(*self.combined_spectrum.points))
 
 class TelluricScreen(IRScreen):
     pass

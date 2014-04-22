@@ -63,6 +63,19 @@
         text: 'Header'
         on_press: self.launch_header()
 
+<SpecscrollInsert>:
+    orientation: 'horizontal'
+    size_hint: 1, None
+    height: '30dp'
+    Label:
+        text: root.text
+    Checkbox:
+        size_hint: None, None
+        height: '30dp'
+        width: '30dp'
+        active: root.active
+        on_active: root.active = self.active
+
 <IRScreen>:
     ScrollView:
         do_scroll_x: False
@@ -77,6 +90,107 @@
                 padding: '8dp'
                 size_hint: (1, 1) if root.fullscreen else (.9, None)
                 height: self.height if root.fullscreen else self.minimum_height
+
+<TelluricScreen>:
+    name: 'telluric'
+    id: tellscreen
+    BoxLayout:
+        orientation: 'vertical'
+        Image:
+            size_hint: None, None
+            size: self.texture_size
+            source: 'resources/stopsign.png'
+        AnchorLayout:
+            Label:
+                valign: 'center'
+                halign: 'center'
+                text: 'This area is under construction'
+
+<CombineScreen>:
+    name: 'combine'
+    id: combine
+    speclist: [re.sub('.fits','',x.fitsfile) for x in app.current_target.images]
+    paths: app.current_paths
+    BoxLayout:
+        orientation: 'vertical'
+        Graph:
+            id: multispec
+            size_hint_y: 0.35
+            xlabel: 'Wavelength'
+            ylabel: 'Counts'
+            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_major: int((root.wmax-root.wmin)/5.)
+            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_major: int((root.dmax - root.dmin) / 5.)
+            x_grid_label: True
+            y_grid_label: True
+            xlog: False
+            ylog: False
+            x_grid: False
+            y_grid: False
+            xmin: root.wmin
+            xmax: root.wmax
+            ymin: root.dmin
+            ymax: root.dmax
+            label_options: {'bold': True}
+        Graph:
+            id: combspec
+            size_hint_y: 0.35
+            xlabel: 'Wavelength'
+            ylabel: 'Counts'
+            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_major: int((root.wmax-root.wmin)/5.)
+            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_major: int((root.dmax - root.dmin) / 5.)
+            x_grid_label: True
+            y_grid_label: True
+            xlog: False
+            ylog: False
+            x_grid: False
+            y_grid: False
+            xmin: root.wmin
+            xmax: root.wmax
+            ymin: root.dmin
+            ymax: root.dmax
+            label_options: {'bold': True}
+        BoxLayout:
+            size_hint_y: 0.3
+            orientation: 'horizontal'
+            BorderBox:
+                ScrollView:
+                    BoxLayout:
+                        id: specscroll
+                        orientation: 'vertical'
+            BoxLayout:
+                orientation: 'vertical'
+                Spinner:
+                    text: 'Choose a fiducial for scaling'
+                    values: root.speclist
+                    on_text: root.set_scale(self.text)
+                BoxLayout:
+                    orientation: 'horizontal'
+                    ToggleButton:
+                        id: median
+                        text: 'Median'
+                        group: 'medmean'
+                        state: 'down'
+                        on_state: if state == 'down': root.comb_method = 'median'
+                    ToggleButton:
+                        text: 'Weighted Mean'
+                        group: 'medmean'
+                        state: 'up'
+                        on_state: if state == 'down': root.comb_method = 'mean'
+                BoxLayout:
+                    orientation: 'horizontal'
+                    TextInput:
+                        id: savefile
+                        size_hint_x: 0.7
+                        text: app.current_target.id+'.fits'
+                    Button:
+                        size_hint_x: 0.3
+                        text: 'Save'
+                        on_press: root.combine()
+
                 
 <WavecalScreen>:
     name: 'wavecal'
@@ -159,7 +273,7 @@
                         ToggleButton:
                             text: 'Use sky lines'
                             group: 'caltype'
-                            state: 'down'
+                            state: 'up'
                 BoxLayout:
                     orientation: 'horizontal'
                     Label:
