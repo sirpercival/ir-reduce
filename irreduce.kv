@@ -90,7 +90,7 @@
                 spacing: '8dp'
                 padding: '8dp'
                 size_hint: (1, 1) if root.fullscreen else (.9, None)
-                height: self.height if root.fullscreen else self.minimum_height
+                height: self.height if root.fullscreen else root.height
 
 <TelluricScreen>:
     name: 'telluric'
@@ -101,11 +101,10 @@
             size_hint: None, None
             size: self.texture_size
             source: 'resources/stopsign.png'
-        AnchorLayout:
-            Label:
-                valign: 'middle'
-                halign: 'center'
-                text: 'This area is under construction'
+        Label:
+            valign: 'middle'
+            halign: 'center'
+            text: 'This area is under construction'
 
 <CombineScreen>:
     name: 'combine'
@@ -703,10 +702,11 @@ BoxLayout:
             ActionPrevious:
                 with_previous: False
                 title: app.current_title
+                app_icon: 'resources/irreduc-icon.png'
             ActionSpinner:
                 id: spnr
                 important: True
-                text: 'Choose a step'
+                text: 'Instrument Profile'
                 values: app.screen_names
                 on_text:
                     if sm.current != args[1]:\

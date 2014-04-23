@@ -95,10 +95,8 @@ def pair_dithers(ditherlist):
     b = [i for i, x in enumerate(ditherlist) if x == 'B']
     na = float(len(a))
     nb = float(len(b))
-    if na > nb:
-        aa = [a[i] for i in (arange(nb)*na/nb).astype('int')]
-    elif nb > na:
-        bb = [b[i] for i in (arange(na)*na/nb).astype('int')]
+    aa = [a[i] for i in (arange(nb)*na/nb).astype('int')] if na > nb else a
+    bb = [b[i] for i in (arange(na)*na/nb).astype('int')] if nb > na else b
     return zip(aa, bb)
     
 def write_fits(outputfile, header, data):
