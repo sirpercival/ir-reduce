@@ -40,7 +40,7 @@ def image_stack(flist, stub, output = 'imstack.fits'):
     
 class ObsTarget(object):
     def __init__(self, **kwargs):
-        self.id = kwargs.get('id','')
+        self.targid = kwargs.get('id','')
         self.instrument_id = kwargs.get('iid','')
         self.filestring = kwargs.get('files','')
         self.night = kwargs.get('night',None)
@@ -51,7 +51,7 @@ class ObsTarget(object):
 
 class InstrumentProfile(object):
     def __init__(self, **kwargs):
-        self.id = id
+        self.instid = kwargs.get(id,'')
         self.tracedir = kwargs.get('direction','horizontal')
         self.dimensions = kwargs.get('dimensions',(1024,1024))
         self.headerkeys = kwargs.get('header', {})
@@ -59,7 +59,7 @@ class InstrumentProfile(object):
 
 class ObsRun(object):
     def __init__(self, **kwargs):
-        self.id = kwargs.get('id','')
+        self.runid = kwargs.get('id','')
         self.nights = {}
     
     def addnight(self, night):
@@ -102,6 +102,6 @@ class ObsNight(object):
     def add_target(self, **kwargs):
         tmp = ObsTarget(**kwargs)
         tmp.files = parse_filestring(self.filestub)
-        self.targets[tmp.id] = tmp
+        self.targets[tmp.targid] = tmp
     
     

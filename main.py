@@ -12,6 +12,7 @@ from kivy.properties import ListProperty, NumericProperty, ObjectProperty, \
     StringProperty, DictProperty, AliasProperty, BooleanProperty
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
+from kivy.uix.button import Button
 from kivy.graphics.vertex_instructions import Line
 from kivy.graphics.context_instructions import Color
 from kivy.graphics.texture import Texture
@@ -91,15 +92,16 @@ class InstrumentScreen(IRScreen):
     saved_instruments = ListProperty([])
     instrument_list = ListProperty([])
     current_text = StringProperty('')
-    current_instrument = ObjectProperty(InstrumentProfile(id='', **blank_instrument))
+    current_instrument = ObjectProperty(InstrumentProfile(instid='', **blank_instrument))
     trace_direction = StringProperty('horizontal')
     
     def on_pre_enter(self):
         idb = shelve.open(instrumentdb)
         self.saved_instrument_names = sorted(idb.keys())
-        self.saved_instruments = [idb[s] for s in self.saved_instruments]
+        print self.saved_instrument_names
+        self.saved_instruments = [idb[s] for s in self.saved_instrument_names]
         idb.close()
-        self.instrument_list = [Button(text = x, size_hint_y = None, height = 30) \
+        self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
             for x in self.saved_instrument_names]
     
     def set_instrument(self):
@@ -107,18 +109,19 @@ class InstrumentScreen(IRScreen):
         if self.current_text in self.saved_instruments:
             self.current_instrument = self.instrument_list[self.current_text]
         else:
-            self.current_instrument = InstrumentProfile(id=self.current_text, \
+            self.current_instrument = InstrumentProfile(instid=self.current_text, \
                 **blank_instrument)
     
     def save_instrument(self):
-        new_instrument = InstrumentProfile(id = self.current_text, \
+        print self.current_text
+        new_instrument = InstrumentProfile(instid = self.current_text, \
             direction = 'horizontal' if self.ids.trace_h.state == 'down' else 'vertical', \
             dimensions = (self.ids.xdim.text, self.ids.ydim.text), \
             description = self.ids.idesc.text, header = {'exp':self.ids.etime.text, \
                 'air':self.ids.secz.text, 'type':self.ids.itype.text})
         self.current_instrument = new_instrument
         idb = shelve.open(instrumentdb)
-        idb[new_instrument.id] = new_instrument
+        idb[new_instrument.instid] = new_instrument
         idb.close()
         self.on_pre_enter()
         
@@ -130,14 +133,14 @@ class ObservingScreen(IRScreen):
     obsids = DictProperty({})
     obsrun_list = ListProperty([])
     obsrun_buttons = ListProperty([])
-    current_obsrun = ObjectProperty(ObsRun(id=''))
+    current_obsrun = ObjectProperty(ObsRun(runid=''))
     obsnight_list = ListProperty([])
     obsnight_buttons = ListProperty([])
     current_obsnight = ObjectProperty(ObsNight(date='', **blank_night))
     instrument_list = ListProperty([])
     caltype = StringProperty('')
     target_list = ListProperty([])
-    current_target = ObjectProperty(ObsTarget(id='', **blank_target))
+    current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
     file_list = ListProperty([])
     
     def on_enter(self):
@@ -171,7 +174,7 @@ class ObservingScreen(IRScreen):
             odb.close()
         else:
             run_db = self.obsids[run_id]
-        self.current_obsrun = ObsRun(id=run_id)
+        self.current_obsrun = ObsRun(runid=run_id)
         rdb = shelve.open(run_db)
         for r in rdb:
             self.current_obsrun.addnight(rdb[r])
@@ -190,7 +193,7 @@ class ObservingScreen(IRScreen):
             self.current_obsrun.addnight(self.current_obsnight)
         else:
             self.current_obsnight = self.current_obsrun.get_night(night_id)
-        rdb = shelve.open(self.obsids[self.current_obsrun.id])
+        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
         rdb.close()
@@ -243,7 +246,7 @@ class ObservingScreen(IRScreen):
     
     def save_night(self):
         self.current_obsrun[self.current_obsnight.date] = self.current_obsnight
-        rdb = shelve.open(self.obsids[self.current_obsrun.id])
+        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
         rdb.close()
@@ -262,9 +265,9 @@ class ObservingScreen(IRScreen):
         self.current_target = ObsTarget(targs, night=self.current_obsnight)
         self.current_obsnight.add_target(self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
-        self.ids.targs.text = self.current_target.id
+        self.ids.targs.text = self.current_target.targid
         self.set_filelist()
-        rdb = shelve.open(self.obsids[self.current_obsrun.id])
+        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         rdb[self.current_obsnight.date] = self.current_obsnight
         rdb.close()
     
@@ -280,9 +283,9 @@ class ObservingScreen(IRScreen):
         self.current_target.dither = [x.dithertype for x in self.file_list]
         self.current_target.notes = self.ids.tnotes.text
         #just make sure everything is propagating correctly
-        self.current_obsnight.targets[self.current_target.id] = self.current_target
+        self.current_obsnight.targets[self.current_target.targid] = self.current_target
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
-        rdb = shelve.open(self.obsids[self.current_obsrun.id])
+        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
         rdb.close()
@@ -710,7 +713,7 @@ class IRReduceApp(App):
     screen_names = ListProperty([])
     extract_pairs = ListProperty([])
     current_night = ObjectProperty(ObsNight(date='', **blank_night))
-    current_target = ObjectProperty(ObsTarget(id='', **blank_target))
+    current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
     current_paths = DictProperty({})
     current_impair = ObjectProperty(None)
     

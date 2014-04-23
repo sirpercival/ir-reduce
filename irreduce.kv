@@ -185,7 +185,7 @@
                     TextInput:
                         id: savefile
                         size_hint_x: 0.7
-                        text: app.current_target.id+'.fits'
+                        text: app.current_target.targid+'.fits'
                     Button:
                         size_hint_x: 0.3
                         text: 'Save'
@@ -607,15 +607,16 @@
     name: 'instrument'
     BoxLayout:
         orientation: 'vertical'
+        spacing: '10dp'
         ComboEdit:
             id: iprof
             multiline: False
             text: 'Instrument Profile ID'
-            size_hint: 0.8, 0.1
+            size_hint: 0.8, 0.15
             options: root.instrument_list
-            on_focus: root.set_instrument()
+            on_focus: if not self.focus: root.set_instrument()
         BorderBox:
-            size_hint: 0.8, 0.3
+            size_hint: 0.8, 0.35
             BoxLayout:
                 orientation: 'vertical'
                 Label:
@@ -632,7 +633,7 @@
                     group: 'tracedir'
                     state: 'down' if root.current_instrument.tracedir == 'vertical' else 'normal'
         BorderBox:
-            size_hint: 0.8, 0.2
+            size_hint: 0.8, 0.25
             BoxLayout:
                 orientation: 'vertical'
                 Label:
@@ -653,10 +654,12 @@
                         multiline: False
                         text: str(root.current_instrument.dimensions[1])
         BorderBox:
-            size_hint: 0.8, 0.4
+            size_hint: 0.8, 0.6
             TextInput:
                 id: idesc
                 text: root.current_instrument.description
+        Widget:
+            size_hint_y: 0.5
     BoxLayout:
         orientation: 'vertical'
         Label:
