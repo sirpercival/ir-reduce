@@ -745,7 +745,7 @@ class IRReduceApp(App):
         sm.add_widget(TelluricScreen())
         sm.current = 'instrument'
         self.index = 0
-        sm.current_title = self.screen_names[self.index]
+        self.current_title = self.screen_names[self.index]
     
     def on_pause(self):
         return True

@@ -572,6 +572,7 @@
             Button:
                 text: 'Save'
                 on_press: root.save_night()
+        Widget:
     BoxLayout:
         orientation: 'vertical'
         Spinner:
@@ -595,7 +596,7 @@
         TextInput:
             id: tnotes
             multiline: True
-            size_hint: 1, 0.3
+            size_hint: 1, 0.4
             text: root.current_target.notes
         Button:
             size_hint: 1, 0.1
@@ -717,11 +718,11 @@ BoxLayout:
                     app.go_screen(idx)
             ActionButton:
                 text: 'Previous'
-                icon: 'atlas://resources/buttons/left-normal.png'
+                icon: 'atlas://resources/buttons/left-normal'
                 on_release: app.go_previous_screen()
             ActionButton:
                 text: 'Next'
-                icon: 'atlas://resources/buttons/right-normal.png'
+                icon: 'atlas://resources/buttons/right-normal'
                 on_release: app.go_next_screen()
     ScreenManager:
         id: sm
