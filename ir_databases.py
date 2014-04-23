@@ -51,7 +51,7 @@ class ObsTarget(object):
 
 class InstrumentProfile(object):
     def __init__(self, **kwargs):
-        self.instid = kwargs.get(id,'')
+        self.instid = kwargs.get('instid','')
         self.tracedir = kwargs.get('direction','horizontal')
         self.dimensions = kwargs.get('dimensions',(1024,1024))
         self.headerkeys = kwargs.get('header', {})

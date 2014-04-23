@@ -98,7 +98,6 @@ class InstrumentScreen(IRScreen):
     def on_pre_enter(self):
         idb = shelve.open(instrumentdb)
         self.saved_instrument_names = sorted(idb.keys())
-        print self.saved_instrument_names
         self.saved_instruments = [idb[s] for s in self.saved_instrument_names]
         idb.close()
         self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
@@ -106,25 +105,34 @@ class InstrumentScreen(IRScreen):
     
     def set_instrument(self):
         self.current_text = self.ids.iprof.text
-        print self.current_text
-        if self.current_text in self.saved_instruments:
-            self.current_instrument = self.instrument_list[self.current_text]
-        else:
+        try:
+            ind = self.saved_instrument_names.index(self.current_text)
+            self.current_instrument = self.saved_instruments[ind]
+        except ValueError:
             self.current_instrument = InstrumentProfile(instid=self.current_text, \
                 **blank_instrument)
+        self.ids.trace_h.state = 'down' if self.current_instrument.tracedir == 'horizontal' else 'normal'
+        self.ids.trace_v.state = 'down' if self.current_instrument.tracedir == 'vertical' else 'normal'
+        self.ids.xdim.text = str(self.current_instrument.dimensions[0])
+        self.ids.ydim.text = str(self.current_instrument.dimensions[1])
+        self.ids.idesc.text = self.current_instrument.description
+        self.ids.etime.text = self.current_instrument.headerkeys['exp']
+        self.ids.secz.text = self.current_instrument.headerkeys['air']
+        self.ids.itype.text = self.current_instrument.headerkeys['type']
     
     def save_instrument(self):
-        new_instrument = InstrumentProfile(instid = self.current_text, \
-            direction = 'horizontal' if self.ids.trace_h.state == 'down' else 'vertical', \
-            dimensions = (self.ids.xdim.text, self.ids.ydim.text), \
-            description = self.ids.idesc.text, header = {'exp':self.ids.etime.text, \
-                'air':self.ids.secz.text, 'type':self.ids.itype.text})
+        args = {'instid':self.current_text, 'dimensions':(int(self.ids.xdim.text), 
+            int(self.ids.ydim.text)), 'direction':'horizontal' \
+            if self.ids.trace_h.state == 'down' else 'vertical', \
+            'description':self.ids.idesc.text, 'header':{'exp':self.ids.etime.text, \
+                'air':self.ids.secz.text, 'type':self.ids.itype.text}}
+        new_instrument = InstrumentProfile(**args)
         self.current_instrument = new_instrument
         idb = shelve.open(instrumentdb)
-        print new_instrument.instid
         idb[new_instrument.instid] = new_instrument
         idb.close()
         self.on_pre_enter()
+
         
 blank_night = {'filestub':'', 'rawpath':'', 'outpath':'', 'calpath':'', \
     'flaton':None, 'flatoff':None, 'cals':None}

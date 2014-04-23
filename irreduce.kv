@@ -626,12 +626,12 @@
                     id: trace_h
                     text: 'Horizontal'
                     group: 'tracedir'
-                    state: 'down' if root.current_instrument.tracedir == 'horizontal' else 'normal'
+                    state: 'down'
                 ToggleButton:
                     id: trace_v
                     text: 'Vertical'
                     group: 'tracedir'
-                    state: 'down' if root.current_instrument.tracedir == 'vertical' else 'normal'
+                    state: 'normal'
         BorderBox:
             size_hint: 0.8, 0.25
             BoxLayout:
@@ -646,18 +646,18 @@
                     TextInput:
                         id: xdim
                         multiline: False
-                        text: str(root.current_instrument.dimensions[0])
+                        text: '1024'
                     Label:
                         text: 'Y'
                     TextInput:
                         id: ydim
                         multiline: False
-                        text: str(root.current_instrument.dimensions[1])
+                        text: '1024'
         BorderBox:
             size_hint: 0.8, 0.6
             TextInput:
                 id: idesc
-                text: root.current_instrument.description
+                text: 'Instrument Profile Description'
         Widget:
             size_hint_y: 0.5
     BoxLayout:
