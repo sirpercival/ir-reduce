@@ -9,7 +9,7 @@ fitmethod = fitting.NonLinearLSQFitter()
 def calibrate_wavelength(cal, linelist, srange, niter = 2):
     '''linelist file should be a json file with 2
     equal-length entries: "wavelength" and "strength".
-    Wavelength should be in Å.'''
+    Wavelength should be in angstroms.'''
     
     with open(linelist) as f:
         lines = json.read(f)
