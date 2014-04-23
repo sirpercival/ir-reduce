@@ -9,10 +9,9 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.dropdown import DropDown
 from kivy.uix.textinput import TextInput
 from kivy.properties import ListProperty, NumericProperty, ObjectProperty, \
-    StringProperty, DictProperty, AliasProperty
+    StringProperty, DictProperty, AliasProperty, BooleanProperty
 from kivy.uix.widget import Widget
-from kivy.uix.popup import Popip
-from kivy.uix.label import Labels
+from kivy.uix.label import Label
 from kivy.graphics.vertex_instructions import Line
 from kivy.graphics.context_instructions import Color
 from kivy.graphics.texture import Texture
@@ -92,7 +91,7 @@ class InstrumentScreen(IRScreen):
     saved_instruments = ListProperty([])
     instrument_list = ListProperty([])
     current_text = StringProperty('')
-    current_instrument = ObjectProperty(InstrumentProfile(id='', blank_instrument))
+    current_instrument = ObjectProperty(InstrumentProfile(id='', **blank_instrument))
     trace_direction = StringProperty('horizontal')
     
     def on_pre_enter(self):
@@ -109,7 +108,7 @@ class InstrumentScreen(IRScreen):
             self.current_instrument = self.instrument_list[self.current_text]
         else:
             self.current_instrument = InstrumentProfile(id=self.current_text, \
-                blank_instrument)
+                **blank_instrument)
     
     def save_instrument(self):
         new_instrument = InstrumentProfile(id = self.current_text, \
@@ -134,11 +133,11 @@ class ObservingScreen(IRScreen):
     current_obsrun = ObjectProperty(ObsRun(id=''))
     obsnight_list = ListProperty([])
     obsnight_buttons = ListProperty([])
-    current_obsnight = ObjectProperty(ObsNight(date='', blank_night))
+    current_obsnight = ObjectProperty(ObsNight(date='', **blank_night))
     instrument_list = ListProperty([])
     caltype = StringProperty('')
     target_list = ListProperty([])
-    current_target = ObjectProperty(ObsTarget(id='', blank_target))
+    current_target = ObjectProperty(ObsTarget(id='', **blank_target))
     file_list = ListProperty([])
     
     def on_enter(self):
@@ -162,7 +161,7 @@ class ObservingScreen(IRScreen):
     def set_obsrun(self):
         run_id = self.ids.obsrun.text
         if run_id not in self.obsids:
-            while True
+            while True:
                 run_db = 'storage/'+uuid.uuid4()
                 if not glob.glob(run_db+'*'):
                     break
@@ -187,7 +186,7 @@ class ObservingScreen(IRScreen):
             self.obsnight_list.append(night_id)
             self.obsnight_buttons.append(Button(text = night_id, \
                 size_hint_y = None, height = 30))
-            self.current_obsnight = ObsNight(date = night_id, blank_night)
+            self.current_obsnight = ObsNight(date = night_id, **blank_night)
             self.current_obsrun.addnight(self.current_obsnight)
         else:
             self.current_obsnight = self.current_obsrun.get_night(night_id)
@@ -199,17 +198,25 @@ class ObservingScreen(IRScreen):
     
     def pick_rawpath(self):
         popup = DirChooser()
-        popup.bind(on_dismiss=lambda x: self.current_obsnight.rawpath = popup.chosen_directory)
+        popup.bind(on_dismiss=lambda x: self.setpath('raw',popup.chosen_directory))
         popup.open()
+    
+    def setpath(self, which, dir):
+        if which == 'raw':
+            self.current_obsnight.rawpath = dir
+        elif which == 'out':
+            self.current_obsnight.outpath = dir
+        elif which == 'cal':
+            self.current_obsnight.calpath = dir
         
     def pick_outpath(self):
         popup = DirChooser()
-        popup.bind(on_dismiss=lambda x: self.current_obsnight.outpath = popup.chosen_directory)
+        popup.bind(on_dismiss=lambda x: self.setpath('out',popup.chosen_directory))
         popup.open()
         
     def pick_calpath(self):
         popup = DirChooser()
-        popup.bind(on_dismiss=lambda x: self.current_obsnight.calpath = popup.chosen_directory)
+        popup.bind(on_dismiss=lambda x: self.setpath('cal',popup.chosen_directory))
         popup.open()
     
     def set_caltype(self, caltype):
@@ -248,7 +255,7 @@ class ObservingScreen(IRScreen):
     
     def add_target(self):
         popup = AddTarget(instrumentlist = self.instrument_list)
-        popup.bind(on_dismiss: self.update_targets(popup.target_args))
+        popup.bind(on_dismiss= self.update_targets(popup.target_args))
         popup.open()
     
     def update_targets(self, targs):
@@ -288,16 +295,16 @@ class ExtractRegionScreen(IRScreen):
     imwid = NumericProperty(1024)
     imht = NumericProperty(1024)
     bx1 = NumericProperty(0)
-    bx2 = NumericProperty(self.imwid)
+    bx2 = NumericProperty(1024)
     by1 = NumericProperty(0)
-    by2 = NumericProperty(self.imht)
-    the_image = ObjectProperty(None)
+    by2 = NumericProperty(1024)
+    imcanvas = ObjectProperty(None)
     current_impair = ObjectProperty(None)
     
     def __init__(self):
         super(ExtractRegionScreen, self).__init__()
         self.ids.ipane.load_data(default_image)
-        with self.the_image.canvas.after:
+        with self.imcanvas.canvas.after:
             c = Color(30./255., 227./255., 224./255.)
             self.regionline = Line(points=self.lcoords, close=True, \
                 dash_length = 2, dash_offset = 1)
@@ -318,8 +325,8 @@ class ExtractRegionScreen(IRScreen):
         self.imwid, self.imht = self.current_impair.dimensions
     
     def get_coords(self):
-        xscale = float(self.the_image.width) / float(self.imwid)
-        yscale = float(self.the_image.height) / float(self.imht)
+        xscale = float(self.imcanvas.width) / float(self.imwid)
+        yscale = float(self.imcanvas.height) / float(self.imht)
         x1 = float(self.bx1) * xscale
         y1 = float(self.by1) * yscale
         x2 = float(self.bx2) * xscale
@@ -335,7 +342,7 @@ class ExtractRegionScreen(IRScreen):
             self.bx2 = value
         elif coord == 'y1':
             self.by1 = value
-        elif coord = 'y2':
+        elif coord == 'y2':
             self.by2 = value
         self.regionline.points = self.lcoords
     
@@ -356,7 +363,7 @@ class TracefitScreen(IRScreen):
     current_target = ObjectProperty(None)
     pairstrings = ListProperty([])
     apertures = DictProperty({'pos':[], 'neg':[]})
-    drange = ListProperty([])
+    drange = ListProperty([0,1024])
     tracepoints = ListProperty([])
     trace_axis = NumericProperty(0)
     fit_params = DictProperty({})
@@ -438,8 +445,11 @@ class TracefitScreen(IRScreen):
         
     def set_psf(self):
         popup = SetFitParams()
-        popup.bind(on_dismiss: self.fit_params = popup.fit_args)
+        popup.bind(on_dismiss = lambda x: self.setfp(popup.fit_args))
         popup.open()
+    
+    def setfp(self, args):
+        self.fit_params = args
         
     def fit_trace(self):
         if not self.fit_params:
@@ -535,7 +545,7 @@ class WavecalScreen(IRScreen):
     wmin = NumericProperty(0)
     wmax = NumericProperty(1024)
     dmin = NumericProperty(0)
-    dmax = NumericProperty(0)
+    dmax = NumericProperty(1024)
     speclist = ListProperty([]) #set via app?
     spec_index = NumericProperty(0)
     current_spectrum = ObjectProperty(None)
@@ -623,7 +633,7 @@ class CombineScreen(IRScreen):
     wmin = NumericProperty(0)
     wmax = NumericProperty(1024)
     dmin = NumericProperty(0)
-    dmax = NumericProperty(0)
+    dmax = NumericProperty(1024)
     combined_spectrum = ObjectProperty(MeshLinePlot(color=[1,1,1,1]))
     the_specs = ListProperty([])
     spec_inserts = ListProperty([])
@@ -637,7 +647,7 @@ class CombineScreen(IRScreen):
         for i, ts in enumerate(self.the_specs):
             tmp = SpecscrollInsert(text=flist[i])
             tmp.spectrum.color = colors[i] + (1)
-            tmp.bind(active=toggle_spectrum(i)
+            tmp.bind(active=toggle_spectrum(i))
             if not ts.wav:
                 tmp.active = False
                 self.scaled_spectra.append([xrange(len(ts.spec)),ts.spec])
@@ -646,7 +656,7 @@ class CombineScreen(IRScreen):
                 continue
             self.scaled_spectra.append([ts.wav,ts.spec])
             tmp.spectrum.points = zip(*self.scaled_spectra[i])
-            tmp.bind(active=toggle_spectrum(i)
+            tmp.bind(active=toggle_spectrum(i))
             self.ids.multispec.add_plot(tmp.spectrum)
             self.spec_inserts.append(tmp)
         self.setminmax()
@@ -699,8 +709,8 @@ class IRReduceApp(App):
     index = NumericProperty(-1)
     screen_names = ListProperty([])
     extract_pairs = ListProperty([])
-    current_night = ObjectProperty(None)
-    current_target = ObjectProperty(None)
+    current_night = ObjectProperty(ObsNight(date='', **blank_night))
+    current_target = ObjectProperty(ObsTarget(id='', **blank_target))
     current_paths = DictProperty({})
     current_impair = ObjectProperty(None)
     

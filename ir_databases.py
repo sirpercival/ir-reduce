@@ -27,7 +27,7 @@ def parse_filestring(filestring, stub, dithers = []):
                 for j in range(int(f[i]), int(f[i+1])+1):
                     files.append(j)
     images = [FitsImage(base % x) for x in files]
-    dithers = [dither_pattern[x mod 4] for x in range(len(files))]
+    dithers = [dither_pattern[x % 4] for x in range(len(files))]
     
     return images
     
@@ -42,7 +42,7 @@ class ObsTarget(object):
     def __init__(self, **kwargs):
         self.id = kwargs.get('id','')
         self.instrument_id = kwargs.get('iid','')
-        self.filestring = files
+        self.filestring = kwargs.get('files','')
         self.night = kwargs.get('night',None)
         self.notes = ''
         self.images = []
@@ -52,14 +52,14 @@ class ObsTarget(object):
 class InstrumentProfile(object):
     def __init__(self, **kwargs):
         self.id = id
-        self.tracedir = direction
-        self.dimensions = dimensions
-        self.headerkeys = header
-        self.description = description
+        self.tracedir = kwargs.get('direction','horizontal')
+        self.dimensions = kwargs.get('dimensions',(1024,1024))
+        self.headerkeys = kwargs.get('header', {})
+        self.description = kwargs.get('description','')
 
 class ObsRun(object):
     def __init__(self, **kwargs):
-        self.id = id
+        self.id = kwargs.get('id','')
         self.nights = {}
     
     def addnight(self, night):
@@ -89,15 +89,15 @@ class ExtractedSpectrum(object):
 
 class ObsNight(object):
     def __init__(self, **kwargs):
-        self.date = date
+        self.date = kwargs.get('date','')
         self.targets = {}
-        self.filestub = filestub
-        self.rawpath = rawpath
-        self.outpath = outpath
-        self.calpath = calpath
-        self.flaton = image_stack(flaton, filestub, output=self.date+'-FlatON.fits') if flaton else None
-        self.flatoff = image_stack(flatoff, filestub, output=self.date+'-FlatOFF.fits') if flatoff else None
-        self.cals = image_stack(cals, filestub, output=self.date+'-Wavecal.fits') if cals else None
+        self.filestub = kwargs.get('filestub','')
+        self.rawpath = kwargs.get('rawpath','')
+        self.outpath = kwargs.get('outpath','')
+        self.calpath = kwargs.get('calpath','')
+        self.flaton = image_stack(flaton, filestub, output=self.date+'-FlatON.fits') if kwargs.get('flaton',False) else None
+        self.flatoff = image_stack(flatoff, filestub, output=self.date+'-FlatOFF.fits') if kwargs.get('flatoff',False) else None
+        self.cals = image_stack(cals, filestub, output=self.date+'-Wavecal.fits') if kwargs.get('cals',False) else None
     
     def add_target(self, **kwargs):
         tmp = ObsTarget(**kwargs)

@@ -25,7 +25,7 @@ def calibrate_wavelength(cal, linelist, srange, niter = 2):
     p_init = poly.Polynomial1D(2) #initialize to linear
     p_init.parameters = [srange[0], float(srange[1]) / float(ncal), 0]
     lam0 = p_init(np.arange(ncal))
-    R = np.median(lam0) / np.fabs(np.median(lam0[0:-2] - lam0[1:-1])
+    R = np.median(lam0) / np.fabs(np.median(lam0[0:-2] - lam0[1:-1]))
     fwhm_pix = 2.3 #our line width
     #build the synthetic line spectrum
     ns = np.ceil(2 * R * (lmax - lmin) / (lmax + lmin))

@@ -37,7 +37,7 @@ def im_minimum(im1, im2, outputfile = None):
         finalheader = im1.header
     outputimg = fmin(im1, im2)
     im_write(outputfile, outputimg, finalheader)
-    return, finalheader, outputimg
+    return finalheader, outputimg
 
 def minmax(data):
     return nanmin(data), nanmax(data)

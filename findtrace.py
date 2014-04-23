@@ -7,7 +7,7 @@ from copy import deepcopy
 from scipy.interpolate import interp1d, griddata
 
 
-posneg = {'pos':np.greater, 'neg':np.lower}
+posneg = {'pos':np.greater, 'neg':np.less}
 
 def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     if tracedir is None and len(idata.shape) > 1: #check for 2D array
@@ -162,10 +162,10 @@ def extract(fmodel, imarray, telluric, pn, lamp = None):
     fac = (1, 1) if pn == 'pos' else (-1, 1)
     ny, nx = imarray.shape
     yp, xp = np.mgrid[0:ny, 0:nx]
-    aps = np.zeros((nx, len(fmodel._transforms))
-    tells = np.zeros((nx, len(fmodel._transforms))
+    aps = np.zeros((nx, len(fmodel._transforms)))
+    tells = np.zeros((nx, len(fmodel._transforms)))
     if lamp:
-        lamps = np.zeros((nx, len(fmodel._transforms))
+        lamps = np.zeros((nx, len(fmodel._transforms)))
     for i, transform in enumerate(fmodel._transforms):
         ytrace = transform(yp)
         toty = np.nansum(ytrace,dtype=double, axis=0)

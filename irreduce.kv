@@ -1,6 +1,7 @@
 #:kivy 1.8.0
 #:import Factory kivy.factory.Factory
 #:import re re
+#import FadeTransition kivy.screenmanager.FadeTransition
 
 <ActionSpinnerOptions@SpinnerOption>
     background_color: .4, .4, .4, 1
@@ -102,7 +103,7 @@
             source: 'resources/stopsign.png'
         AnchorLayout:
             Label:
-                valign: 'center'
+                valign: 'middle'
                 halign: 'center'
                 text: 'This area is under construction'
 
@@ -118,9 +119,9 @@
             size_hint_y: 0.35
             xlabel: 'Wavelength'
             ylabel: 'Counts'
-            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_minor: 5
             x_ticks_major: int((root.wmax-root.wmin)/5.)
-            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_minor: 5
             y_ticks_major: int((root.dmax - root.dmin) / 5.)
             x_grid_label: True
             y_grid_label: True
@@ -138,9 +139,9 @@
             size_hint_y: 0.35
             xlabel: 'Wavelength'
             ylabel: 'Counts'
-            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_minor: 5
             x_ticks_major: int((root.wmax-root.wmin)/5.)
-            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_minor: 5
             y_ticks_major: int((root.dmax - root.dmin) / 5.)
             x_grid_label: True
             y_grid_label: True
@@ -178,7 +179,7 @@
                     ToggleButton:
                         text: 'Weighted Mean'
                         group: 'medmean'
-                        state: 'up'
+                        state: 'normal'
                         on_state: if state == 'down': root.comb_method = 'mean'
                 BoxLayout:
                     orientation: 'horizontal'
@@ -204,9 +205,9 @@
             size_hint_y: 0.6
             xlabel: 'Wavelength'
             ylabel: 'Counts'
-            x_ticks_minor: int((root.wmax-root.wmin)/10.)
+            x_ticks_minor: 5
             x_ticks_major: int((root.wmax-root.wmin)/5.)
-            y_ticks_minor: int((root.dmax - root.dmin) / 10.)
+            y_ticks_minor: 5
             y_ticks_major: int((root.dmax - root.dmin) / 5.)
             x_grid_label: True
             y_grid_label: True
@@ -223,27 +224,27 @@
             cols: 2
             size_hint_y: 0.4
             BoxLayout:
-                orientation: 'vertical
+                orientation: 'vertical'
                 Spinner:
                     id: specspin
                     text: 'Choose a spectrum'
                     values: root.speclist
                     on_text: root.set_spectrum(self.text)
                 Label:
-                   text: 'Expected wavelength range:'
+                    text: 'Expected wavelength range:'
                 BoxLayout:
                     orientation: 'horizontal'
                     Label:
                         text: 'Min:'
                     TextInput:
                         id: rmin
-                        text: root.wmin
+                        text: str(root.wmin)
                         on_focus: if not self.focus: root.set_wmin(self.text)
                     Label:
                         text: 'Max:'
                     TextInput:
                         id: rmin
-                        text: root.wmax
+                        text: str(root.wmax)
                         on_focus: if not self.focus: root.set_wmax(self.text)
                 BoxLayout:
                     orientation: 'horizontal'
@@ -273,14 +274,14 @@
                         ToggleButton:
                             text: 'Use sky lines'
                             group: 'caltype'
-                            state: 'up'
+                            state: 'normal'
                 BoxLayout:
                     orientation: 'horizontal'
                     Label:
                         text: '# of iterations:'
                     TextInput:
                         id: numiter
-                        text: root.iters
+                        text: '2'
                             
         
 
@@ -304,8 +305,8 @@
             Label:
                 text: 'Positive Apertures:'
             Button:
-                background_normal: 'atlas://resources/buttons/an-normal.png'
-                background_down: 'atlas://resources/buttons/an-pressed.png'
+                background_normal: 'atlas://resources/buttons/an-normal'
+                background_down: 'atlas://resources/buttons/an-pressed'
                 size_hint: None, None
                 size: 24, 24
                 on_press: root.add_postrace()
@@ -313,7 +314,7 @@
             size_hint_y: 0.25
             ScrollView:
                 do_scroll_x: False
-                effect_cls: DampedScrollEffect
+                effect_cls: Factory.DampedScrollEffect
                 GridLayout:
                     cols: 1
                     id: postrace
@@ -325,8 +326,8 @@
             Label:
                 text: 'Negative Apertures:'
             Button:
-                background_normal: 'atlas://buttons/buttons/an-normal'
-                background_down: 'atlas://buttons/buttons/an-pressed'
+                background_normal: 'atlas://resources/buttons/an-normal'
+                background_down: 'atlas://resources/buttons/an-pressed'
                 size_hint: None, None
                 size: 24, 24
                 on_press: root.add_negtrace()
@@ -334,7 +335,7 @@
             size_hint_y: 0.25
             ScrollView:
                 do_scroll_x: False
-                effect_cls: DampedScrollEffect
+                effect_cls: Factory.DampedScrollEffect
                 GridLayout:
                     cols: 1
                     id: negtrace
@@ -365,8 +366,8 @@
             ylabel: 'Mean Counts'
             x_ticks_minor: 5
             x_ticks_major: 10
-            y_ticks_minor: (root.drange[1] - root.drange[0]) / float(10)
-            y_ticks_major: (root.drange[1] - root.drange[0]) / float(5)
+            y_ticks_minor: 5
+            y_ticks_major: int((root.drange[1] - root.drange[0]) / 5.)
             x_grid_label: True
             y_grid_label: True
             xlog: False
@@ -412,7 +413,7 @@
                         size_hint: 0.4, 1
                     TextInput:
                         id: x1t
-                        text: self.bx1
+                        text: str(root.bx1)
                         multiline: False
                         on_focus: if not self.focus: root.set_coord('x1', self.text)
                 Slider:
@@ -420,7 +421,7 @@
                     min: 0
                     max: root.imwid
                     step: 1
-                    value: self.bx1
+                    value: root.bx1
                     size_hint: 1, 0.25
                     on_value: root.set_coord('x1', self.value)
                 BoxLayout:
@@ -431,7 +432,7 @@
                         size_hint: 0.4, 1
                     TextInput:
                         id: y1t
-                        text: self.by1
+                        text: str(root.by1)
                         multiline: False
                         on_focus: if not self.focus: root.set_coord('y1', self.text)
                 Slider:
@@ -439,7 +440,7 @@
                     min: 0
                     max: root.imwid
                     step: 1
-                    value: self.by1
+                    value: root.by1
                     size_hint: 1, 0.25
                     on_value: root.set_coord('y1', self.value)
         BorderBox:
@@ -454,7 +455,7 @@
                         size_hint: 0.4, 1
                     TextInput:
                         id: x2t
-                        text: self.bx2
+                        text: str(root.bx2)
                         multiline: False
                         on_focus: if not self.focus: root.set_coord('x2', self.text)
                 Slider:
@@ -462,7 +463,7 @@
                     min: 0
                     max: root.imwid
                     step: 1
-                    value: self.bx2
+                    value: root.bx2
                     size_hint: 1, 0.25
                     on_value: root.set_coord('x2', self.value)
                 BoxLayout:
@@ -473,7 +474,7 @@
                         size_hint: 0.4, 1
                     TextInput:
                         id: y2t
-                        text: self.by2
+                        text: str(root.by2)
                         multiline: False
                         on_focus: if not self.focus: root.set_coord('y2', self.text)
                 Slider:
@@ -481,7 +482,7 @@
                     min: 0
                     max: root.imwid
                     step: 1
-                    value: self.by2
+                    value: root.by2
                     size_hint: 1, 0.25
                     on_value: root.set_coord('y2', self.value)
         Button:
@@ -588,7 +589,7 @@
             size_hint: 1., 0.4
             ScrollView:
                 do_scroll_x: False
-                effect_cls: DampedScrollEffect
+                effect_cls: Factory.DampedScrollEffect
                 BoxLayout:
                     orientation: 'vertical'
                     id: obsfiles
@@ -625,12 +626,12 @@
                     id: trace_h
                     text: 'Horizontal'
                     group: 'tracedir'
-                    state: 'down' if root.current_instrument.direction == 'horizontal' else 'normal'
+                    state: 'down' if root.current_instrument.tracedir == 'horizontal' else 'normal'
                 ToggleButton:
                     id: trace_v
                     text: 'Vertical'
                     group: 'tracedir'
-                    state: 'down' if root.current_instrument.direction == 'vertical' else 'normal'
+                    state: 'down' if root.current_instrument.tracedir == 'vertical' else 'normal'
         BorderBox:
             size_hint: 0.8, 0.2
             BoxLayout:
@@ -645,13 +646,13 @@
                     TextInput:
                         id: xdim
                         multiline: False
-                        text: root.current_instrument.dimensions[0]
+                        text: str(root.current_instrument.dimensions[0])
                     Label:
                         text: 'Y'
                     TextInput:
                         id: ydim
                         multiline: False
-                        text: root.current_instrument.dimensions[1]
+                        text: str(root.current_instrument.dimensions[1])
         BorderBox:
             size_hint: 0.8, 0.4
             TextInput:
@@ -661,7 +662,7 @@
         orientation: 'vertical'
         Label:
             text: '~Fits Header Keywords~'
-            text_size: 14
+            font_size: 14
             size_hint: 0.8, 0.1
             halign: 'center'
         Label:
@@ -714,12 +715,12 @@ BoxLayout:
             ActionButton:
                 text: 'Previous'
                 icon: 'atlas://resources/buttons/left-normal.png'
-                on_release: app.go_previous()
+                on_release: app.go_previous_screen()
             ActionButton:
                 text: 'Next'
                 icon: 'atlas://resources/buttons/right-normal.png'
-                on_release: app.go_next()
+                on_release: app.go_next_screen()
     ScreenManager:
         id: sm
-        transition: FadeTransition()
+        transition: Factory.FadeTransition()
         on_current_screen: spnr.text = args[1].name

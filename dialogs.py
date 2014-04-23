@@ -205,7 +205,7 @@ fitdialog = '''
 
 Builder.load_string(fitdialog)
 
-class SetFitparams(Popup):
+class SetFitParams(Popup):
     fit_args = DictProperty({})
     
     def set_fit(self):
@@ -243,7 +243,6 @@ deftrace = '''
             id: the_widget
             size_hint: 1, 0.9
             canvas.before:
-                id: the_canvas
                 Rectangle:
                     size: self.size
                     pos: self.pos
@@ -285,9 +284,9 @@ class DefineTrace(Popup):
             [('neg', Point(pointsize=2)) for i in range(self.nneg)]
     
     def set_aperture(self,new_ind):
-        self.ids.the_canvas.remove(self.traces[ap_index])
+        self.ids.the_widget.canvas.remove(self.traces[ap_index])
         self.ap_index = new_ind
-        self.ids.the_canvas.add(self.traces[ap_index])
+        self.ids.the_widget.canvas.add(self.traces[ap_index])
     
     def set_traces(self):
         for point in self.traces:
