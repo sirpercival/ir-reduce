@@ -106,6 +106,7 @@ class InstrumentScreen(IRScreen):
     
     def set_instrument(self):
         self.current_text = self.ids.iprof.text
+        print self.current_text
         if self.current_text in self.saved_instruments:
             self.current_instrument = self.instrument_list[self.current_text]
         else:
@@ -113,7 +114,6 @@ class InstrumentScreen(IRScreen):
                 **blank_instrument)
     
     def save_instrument(self):
-        print self.current_text
         new_instrument = InstrumentProfile(instid = self.current_text, \
             direction = 'horizontal' if self.ids.trace_h.state == 'down' else 'vertical', \
             dimensions = (self.ids.xdim.text, self.ids.ydim.text), \
@@ -121,6 +121,7 @@ class InstrumentScreen(IRScreen):
                 'air':self.ids.secz.text, 'type':self.ids.itype.text})
         self.current_instrument = new_instrument
         idb = shelve.open(instrumentdb)
+        print new_instrument.instid
         idb[new_instrument.instid] = new_instrument
         idb.close()
         self.on_pre_enter()
