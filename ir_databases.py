@@ -59,7 +59,7 @@ class InstrumentProfile(object):
 
 class ObsRun(object):
     def __init__(self, **kwargs):
-        self.runid = kwargs.get('id','')
+        self.runid = kwargs.get('runid','')
         self.nights = {}
     
     def addnight(self, night):

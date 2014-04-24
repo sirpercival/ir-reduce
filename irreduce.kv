@@ -289,6 +289,7 @@
     id: tfscreen
     paths: app.current_paths
     current_target: app.current_target
+    current_flats: app.current_flats
     pairstrings: ['%s - %s' % (x.fitsfile for x in y) for y in app.extract_pairs]
     BoxLayout:
         orientation: 'vertical'
@@ -389,6 +390,7 @@
 <ExtractRegionScreen>:
     name: 'region'
     imcanvas: ipane.ids.the_image
+    theapp: app
     paths: app.current_paths
     extract_pairs: app.extract_pairs
     pairstrings: ['%s - %s' % (x.fitsfile for x in y) for y in self.extract_pairs]
@@ -501,18 +503,18 @@
             id: obsrun
             multiline: False
             text: 'Observing Run ID'
-            size_hint: 0.8, 0.1
+            size_hint: 0.8, 0.125
             options: root.obsrun_buttons
             on_focus: if not self.focus: root.set_obsrun()
         ComboEdit:
             id: obsnight
             multiline: False
             text: 'Observation Date'
-            size_hint: 0.8, 0.1
+            size_hint: 0.8, 0.125
             options: root.obsnight_buttons
             on_focus: if not self.focus: root.set_obsnight()
         BoxLayout:
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             TextInput:
                 id: rawpath
                 text: 'Path to Raw Images'
@@ -523,7 +525,7 @@
                 size_hint_x: 0.4
                 on_press: root.pick_rawpath()
         BoxLayout:
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             TextInput:
                 id: outpath
                 text: 'Path to Output'
@@ -534,7 +536,7 @@
                 size_hint_x: 0.4
                 on_press: root.pick_outpath()
         BoxLayout:
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             TextInput:
                 id: calpath
                 text: 'Path to Calibration Images'
@@ -545,27 +547,27 @@
                 size_hint_x: 0.4
                 on_press: root.pick_calpath()
         Label:
-            size_hint: 0.8, 0.1
+            size_hint: 0.8, 0.125
             text: 'File format:'
             halign: 'left'
         TextInput:
             id: fformat
             text: 'obs.####'
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             multiline: False
         Spinner:
             id: caltypes
-            size_hint: 0.8, 0.1
+            size_hint: 0.8, 0.125
             text: 'Calibration Images'
             values: ['Flats (lamps ON)', 'Flats (lamps OFF)', 'Arc Lamps']
             on_text: root.set_caltype(self.text)
         TextInput:
             id: calfiles
             text: '1-10'
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             multiline: False
         BoxLayout:
-            size_hint: 1, 0.1
+            size_hint: 1, 0.125
             Button:
                 text: 'Make Cals'
                 on_press: root.make_cals()

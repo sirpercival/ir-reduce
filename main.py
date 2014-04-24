@@ -169,12 +169,13 @@ class ObservingScreen(IRScreen):
         theapp.current_target = self.current_target
         theapp.current_paths = {'cal':self.current_obsnight.calpath, 
             'raw':self.current_obsnight.rawpath, 'out':self.current_obsnight.outpath}
+        theapp.current_night = self.current_obsnight
     
     def set_obsrun(self):
         run_id = self.ids.obsrun.text
         if run_id not in self.obsids:
             while True:
-                run_db = 'storage/'+uuid.uuid4()
+                run_db = 'storage/'+str(uuid.uuid4())
                 if not glob.glob(run_db+'*'):
                     break
             self.obsids[run_id] = run_db
@@ -202,6 +203,7 @@ class ObservingScreen(IRScreen):
             self.current_obsrun.addnight(self.current_obsnight)
         else:
             self.current_obsnight = self.current_obsrun.get_night(night_id)
+        print night_id, self.obsids, self.current_obsrun.runid
         rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
@@ -216,10 +218,13 @@ class ObservingScreen(IRScreen):
     def setpath(self, which, dir):
         if which == 'raw':
             self.current_obsnight.rawpath = dir
+            self.ids.rawpath.text = dir
         elif which == 'out':
             self.current_obsnight.outpath = dir
+            self.ids.outpath.text = dir
         elif which == 'cal':
             self.current_obsnight.calpath = dir
+            self.ids.calpath.text = dir
         
     def pick_outpath(self):
         popup = DirChooser()
@@ -312,6 +317,8 @@ class ExtractRegionScreen(IRScreen):
     by2 = NumericProperty(1024)
     imcanvas = ObjectProperty(None)
     current_impair = ObjectProperty(None)
+    current_flats = ObjectProperty(None)
+    theapp = ObjectProperty(None)
     
     def __init__(self):
         super(ExtractRegionScreen, self).__init__()
@@ -321,15 +328,31 @@ class ExtractRegionScreen(IRScreen):
             self.regionline = Line(points=self.lcoords, close=True, \
                 dash_length = 2, dash_offset = 1)
     
+    def on_enter(self):
+        flat = path.join(self.paths['cal'],'Flat.fits')
+        if theapp.current_night.flaton:
+            if theapp.current_night.flatoff:
+                im_subtract(theapp.current_night.flaton, \
+                    theapp.current_night.flatoff, outfile = flat)
+            else:
+                write_fits(flat, theapp.current_night.flaton.header, \
+                    theapp.current_night.flaton.data_array)
+            self.current_flats = FitsImage(flat)
+            self.current_flats.load()
+    
     def on_pre_leave(self):
-        theapp = App.get_running_app()
         theapp.current_impair = self.current_impair
+        theapp.current_flats = self.current_flats
     
     def set_imagepair(self, val):
         pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
         if not path.isfile(fitsfile):
-            im1, im2 = [x.load() for x in copy.deepcopy(self.extract_pairs[pair_index])]
+            im1, im2 = [x for x in copy.deepcopy(self.extract_pairs[pair_index])]
+            im1.load(); im2.load()
+            if self.current_flats:
+                im1 = im_divide(im1, self.current_flats)
+                im2 = im_divide(im2, self.current_flats)
             im_subtract(im1, im2, outfile=fitsfile)
         self.current_impair = FitsImage(fitsfile)
         self.current_impair.load()
@@ -380,6 +403,7 @@ class TracefitScreen(IRScreen):
     trace_axis = NumericProperty(0)
     fit_params = DictProperty({})
     trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,0]),MeshLinePlot(color=[0,1,1,0])])
+    current_flats = ObjectProperty(None)
     
     def set_imagepair(self, val):
         self.pair_index = self.pairstrings.index(val)
@@ -495,7 +519,11 @@ class TracefitScreen(IRScreen):
             self.fitparams['nmodel'], fixdistort = True, fitdegree = self.fitparams['deg'])
         the_app = App.get_running_app()
         
-        im1, im2 = [x.load() for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1.load(); im2.load()
+        if self.current_flats:
+            im1 = im_divide(im1, self.current_flats)
+            im2 = im_divide(im2, self.current_flats)
         im1.data_array = undistort_imagearray(im1.data_array, pdistort)
         im2.data_array = undistort_imagearray(im2.data_array, ndistort)
         im_subtract(im1, im2, outfile=self.current_impair.fitsfile)
@@ -525,9 +553,14 @@ class TracefitScreen(IRScreen):
         the_app = App.get_running_app()
         self.lamp = None
         if the_app.current_night.cals:
-            self.lamp = the_app.current_night.cals.data_array
+            self.lamp = the_app.current_night.cals.data_array if not self.current_flats /
+                else im_divide(the_app.current_night.cals, self.current_flats).data_array
             self.lamp = self.lamp[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
-        im1, im2 = [x.load() for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1.load(); im2.load()
+        if self.current_flats:
+            im1 = im_divide(im1, self.current_flats)
+            im2 = im_divide(im2, self.current_flats)
         im1.data_array = undistort_imagearray(im1.data_array, pdistort)
         im2.data_array = undistort_imagearray(im2.data_array, ndistort)
         tmp, self.tell = im_minimum(im1.data_array, im2.data_array)
@@ -725,6 +758,7 @@ class IRReduceApp(App):
     current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
     current_paths = DictProperty({})
     current_impair = ObjectProperty(None)
+    current_flats = ObjectProperty(None)
     
     def build(self):
         self.title = 'IR-Reduce'

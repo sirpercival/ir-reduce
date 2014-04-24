@@ -77,6 +77,7 @@ dcdialog = '''
         FileChooserListView:
             id: chooser
             dirselect: True
+            multiselect: False
             filter_dirs: True
             filters: [root.check_dir]
         BoxLayout:
@@ -97,10 +98,10 @@ class DirChooser(Popup):
     chosen_directory = StringProperty('')
     
     def check_dir(self, folder, filename):
-        return path.isdir(folder+'/'+filename)
+        return path.isdir(path.join(folder,filename))
     
     def set_directory(self):
-        self.chosen_directory = self.ids.chooser.selection
+        self.chosen_directory = self.ids.chooser.selection[0]
         self.dismiss()
 
 atdialog = '''
