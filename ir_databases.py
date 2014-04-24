@@ -3,6 +3,7 @@ from imarith import medcombine
 from fitsimage import FitsImage
 from numpy import dtype, vstack
 from astropy.io import fits
+from os import path
 
 placeholder = '#'
 reg = placeholder+'+'
@@ -26,13 +27,13 @@ def parse_filestring(filestring, stub, dithers = []):
             for i in range(len(f) - 1):
                 for j in range(int(f[i]), int(f[i+1])+1):
                     files.append(j)
-    images = [FitsImage(base % x) for x in files]
+    images = [FitsImage((base + '.fits') % x) for x in files]
     dithers = [dither_pattern[x % 4] for x in range(len(files))]
     
     return images
     
 def image_stack(flist, stub, output = 'imstack.fits'):
-    imlist = parse_filestring(flist, stub)
+    imlist = [x.fitsfile for x in parse_filestring(flist, stub)]
     comb = medcombine(imlist, outputfile = output)
     tmp = FitsImage(output)
     tmp.flist = flist
@@ -95,13 +96,19 @@ class ObsNight(object):
         self.rawpath = kwargs.get('rawpath','')
         self.outpath = kwargs.get('outpath','')
         self.calpath = kwargs.get('calpath','')
-        self.flaton = image_stack(flaton, filestub, output=self.date+'-FlatON.fits') if kwargs.get('flaton',False) else None
-        self.flatoff = image_stack(flatoff, filestub, output=self.date+'-FlatOFF.fits') if kwargs.get('flatoff',False) else None
-        self.cals = image_stack(cals, filestub, output=self.date+'-Wavecal.fits') if kwargs.get('cals',False) else None
+        self.flaton = image_stack(flaton, path.join(self.rawpath, filestub), \
+            output=path.join(self.calpath, self.date+'-FlatON.fits')) \
+            if kwargs.get('flaton',False) else None
+        self.flatoff = image_stack(flatoff, path.join(self.rawpath, filestub), \
+            output=path.join(self.calpath, self.date+'-FlatOFF.fits')) \
+            if kwargs.get('flatoff',False) else None
+        self.cals = image_stack(cals, path.join(self.rawpath,filestub), \
+            output=path.join(self.calpath, self.date+'-Wavecal.fits')) \
+            if kwargs.get('cals',False) else None
     
     def add_target(self, **kwargs):
         tmp = ObsTarget(**kwargs)
-        tmp.files = parse_filestring(self.filestub)
+        tmp.files = parse_filestring(path.join(self.rawpath,self.filestub))
         self.targets[tmp.targid] = tmp
     
     

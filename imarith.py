@@ -11,11 +11,10 @@ def grab_image_stack(imlist):
     images = []
     headers = []
     for ff in imlist:
-        hdu = fits.open(fitsfile)
+        hdu = fits.open(ff)
+        headers.append(hdu[0].header)
+        images.append(hdu[0].data)
         hdu.close()
-        hdu = hdu[0]
-        headers.append(hdu.header)
-        images.append(hdu.data)
     return headers, images
     
 def im_add(im1, im2, outputfile = None):
@@ -58,6 +57,7 @@ def medcombine(fitslist, outputfile = None):
         #linear fit to find scale factors
         p_init = fm.Linear1D(slope=1, intercept=0)
         fit = fitting.NonLinearLSQFitter()
+        print im.shape, scale_ref.shape, p_init(im).shape
         p = fit(p_init, im, scale_ref)
         images[i] = p(im)
     

@@ -520,6 +520,7 @@
                 text: 'Path to Raw Images'
                 size_hint_x: 0.6
                 multiline: False
+                on_focus: if not self.focus: root.setpath('raw',self.text)
             Button:
                 text: 'Choose'
                 size_hint_x: 0.4
@@ -531,6 +532,7 @@
                 text: 'Path to Output'
                 size_hint_x: 0.6
                 multiline: False
+                on_focus: if not self.focus: root.setpath('out',self.text)
             Button:
                 text: 'Choose'
                 size_hint_x: 0.4
@@ -542,6 +544,7 @@
                 text: 'Path to Calibration Images'
                 size_hint_x: 0.6
                 multiline: False
+                on_focus: if not self.focus: root.setpath('cal',self.text)
             Button:
                 text: 'Choose'
                 size_hint_x: 0.4
@@ -555,6 +558,7 @@
             text: 'obs.####'
             size_hint: 1, 0.125
             multiline: False
+            on_focus: if not self.focus: root.check_filestub(self.text)
         Spinner:
             id: caltypes
             size_hint: 0.8, 0.125

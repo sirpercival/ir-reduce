@@ -101,6 +101,8 @@ class DirChooser(Popup):
         return path.isdir(path.join(folder,filename))
     
     def set_directory(self):
+        if not self.ids.chooser.selection:
+            return
         self.chosen_directory = self.ids.chooser.selection[0]
         self.dismiss()
 
@@ -221,8 +223,10 @@ wdkv = '''
     auto_dismiss: False
     size_hint: 0.5, 0.3
     BoxLayout:
+        orientation: 'vertical'
         Label:
             text: root.text
+            text_size: self.size
         Button:
             size_hint_y: 0.2
             text: 'OK'

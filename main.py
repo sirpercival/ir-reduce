@@ -158,6 +158,7 @@ class ObservingScreen(IRScreen):
         idb.close()
         odb = shelve.open(obsrundb)
         self.obsids = {x:odb[x] for x in odb}
+        self.obsrun_list = odb.keys()
         odb.close()
         self.obsrun_buttons = [Button(text=x, size_hint_y = None, height = 30) \
             for x in self.obsrun_list]
@@ -203,7 +204,10 @@ class ObservingScreen(IRScreen):
             self.current_obsrun.addnight(self.current_obsnight)
         else:
             self.current_obsnight = self.current_obsrun.get_night(night_id)
-        print night_id, self.obsids, self.current_obsrun.runid
+            self.ids.rawpath.text = self.current_obsnight.rawpath
+            self.ids.outpath.text = self.current_obsnight.outpath
+            self.ids.calpath.text = self.current_obsnight.calpath
+            self.ids.fformat.text = self.current_obsnight.filestub
         rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
@@ -236,6 +240,15 @@ class ObservingScreen(IRScreen):
         popup.bind(on_dismiss=lambda x: self.setpath('cal',popup.chosen_directory))
         popup.open()
     
+    def check_filestub(self, stub):
+        placeholder = '#'
+        reg = placeholder+'+'
+        if len(re.findall(reg, stub)) != 1:
+            popup = WarningDialog(text = "File format is not valid; must use '#' as placeholder only")
+            popup.open()
+            return
+        self.current_obsnight.filestub = stub
+    
     def set_caltype(self, caltype):
         if caltype == 'Flats (lamps ON)':
             flist = self.current_obsnight.flaton.flist if self.current_obsnight.flaton else ''
@@ -248,18 +261,21 @@ class ObservingScreen(IRScreen):
     def make_cals(self):
         caltype = self.ids.caltypes.text
         flist = self.ids.calfiles.text
+        raw = self.current_obsnight.rawpath
+        cal = self.current_obsnight.calpath
+        stub = self.current_obsnight.filestub
         if caltype == 'Flats (lamps ON)':
-            self.current_obsnight.flaton = image_stack(flist, self.current_obsnight.filestub, \
-                output=self.current_obsnight.date+'-FlatON.fits')
+            self.current_obsnight.flaton = image_stack(flist, path.join(raw, stub), \
+                output=path.join(cal, self.current_obsnight.date+'-FlatON.fits'))
         elif caltype == 'Flats (lamps OFF)':
-            self.current_obsnight.flatoff = image_stack(flist, self.current_obsnight.filestub, \
-                output=self.current_obsnight.date+'-FlatOFF.fits')
+            self.current_obsnight.flatoff = image_stack(flist, path.join(raw, stub), \
+                output=path.join(cal, self.current_obsnight.date+'-FlatOFF.fits'))
         elif caltype == 'Arc Lamps':
-            self.current_obsnight.cals = image_stack(flist, self.current_obsnight.filestub, \
-                output=self.current_obsnight.date+'-Wavecal.fits')
+            self.current_obsnight.cals = image_stack(flist, path.join(raw, stub), \
+                output=path.join(cal, self.current_obsnight.date+'-Wavecal.fits'))
     
     def save_night(self):
-        self.current_obsrun[self.current_obsnight.date] = self.current_obsnight
+        self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
         rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
