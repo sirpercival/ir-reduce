@@ -553,7 +553,7 @@ class TracefitScreen(IRScreen):
         the_app = App.get_running_app()
         self.lamp = None
         if the_app.current_night.cals:
-            self.lamp = the_app.current_night.cals.data_array if not self.current_flats /
+            self.lamp = the_app.current_night.cals.data_array if not self.current_flats \
                 else im_divide(the_app.current_night.cals, self.current_flats).data_array
             self.lamp = self.lamp[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
