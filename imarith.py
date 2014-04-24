@@ -57,9 +57,8 @@ def medcombine(fitslist, outputfile = None):
         #linear fit to find scale factors
         p_init = fm.Linear1D(slope=1, intercept=0)
         fit = fitting.NonLinearLSQFitter()
-        print im.shape, scale_ref.shape, p_init(im).shape
-        p = fit(p_init, im, scale_ref)
-        images[i] = p(im)
+        p = fit(p_init, im.flatten(), scale_ref.flatten())
+        images[i] = p(im).reshape(im.shape)
     
     images = array(images)
     medimage = median(images, axis=0)
