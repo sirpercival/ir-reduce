@@ -20,13 +20,14 @@ from imagepane import ImagePane, default_image
 from fitsimage import FitsImage
 from comboedit import ComboEdit
 from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
-from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace
+from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace, WaitingDialog
 from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, scale_spec, combine_spectra
 from robuststats import robust_mean as robm, interp_x, idlhash
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
 import shelve, uuid, glob, copy, re
 from os import path
+from threading import Thread
 
 instrumentdb = 'storage/instrumentprofiles'
 obsrundb = 'storage/observingruns'
@@ -196,6 +197,8 @@ class ObservingScreen(IRScreen):
     
     def set_obsnight(self):
         night_id = self.ids.obsnight.text
+        if night_id == '' or self.current_obsrun.runid == '':
+            return
         if night_id not in self.obsnight_list:
             self.obsnight_list.append(night_id)
             self.obsnight_buttons.append(Button(text = night_id, \
@@ -259,20 +262,31 @@ class ObservingScreen(IRScreen):
         self.ids.calfiles.text = flist
         
     def make_cals(self):
+        if not self.current_obsnight.rawpath:
+            return
         caltype = self.ids.caltypes.text
         flist = self.ids.calfiles.text
+        popup = WaitingDialog(text='Please wait while the calibration images build, thank you!')
+        popup.open()
+        if caltype == 'Flats (lamps ON)':
+            t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.flaton, flist, \
+                self.current_obsnight.date+'-FlatON.fits', popup))
+            t.start()
+        elif caltype == 'Flats (lamps OFF)':
+            t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.flatoff, flist, \
+                self.current_obsnight.date+'-FlatOFF.fits', popup))
+            t.start()
+        elif caltype == 'Arc Lamps':
+            t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.cals, flist, \
+                self.current_obsnight.date+'-Wavecal.fits', popup))
+            t.start()
+            
+    def imstack_wrapper(self, target, flist, outp, pup):
         raw = self.current_obsnight.rawpath
         cal = self.current_obsnight.calpath
         stub = self.current_obsnight.filestub
-        if caltype == 'Flats (lamps ON)':
-            self.current_obsnight.flaton = image_stack(flist, path.join(raw, stub), \
-                output=path.join(cal, self.current_obsnight.date+'-FlatON.fits'))
-        elif caltype == 'Flats (lamps OFF)':
-            self.current_obsnight.flatoff = image_stack(flist, path.join(raw, stub), \
-                output=path.join(cal, self.current_obsnight.date+'-FlatOFF.fits'))
-        elif caltype == 'Arc Lamps':
-            self.current_obsnight.cals = image_stack(flist, path.join(raw, stub), \
-                output=path.join(cal, self.current_obsnight.date+'-Wavecal.fits'))
+        target = image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
+        pup.dismiss()
     
     def save_night(self):
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight

@@ -5,8 +5,11 @@ from kivy.lang import Builder
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.textinput import TextInput
 from kivy.graphics.vertex_instructions import Point
+from kivy.animation import Animation
+from kivy.uix.image import Image
 
 from os import path
+import gc
 
 fhdialog = '''
 <FitsCard>:
@@ -303,3 +306,31 @@ class DefineTrace(Popup):
         if self.ids.the_widget.collide_point(touch):
             self.traces[ap_index][1].add_point(touch)
             return True
+            
+waitingkv = '''
+<WaitingDialog>:
+    title: 'Please Wait'
+    auto_dismiss: False
+    size_hint: 0.8, 0.8
+    BoxLayout:
+        orientation: 'vertical'
+        Widget:
+        AnchorLayout:
+            size_hint: 1, 1
+            Image:
+                id: loadimage
+                size_hint: None, None
+                size: '128dp', '128dp'
+                source: 'resources/loading_icon.gif'
+        Label:
+            size_hint_y: 0.2
+            text: root.text
+            text_size: self.size
+            halign: 'center'
+        Widget:
+'''
+
+Builder.load_string(waitingkv)
+
+class WaitingDialog(Popup):
+    text = StringProperty('')

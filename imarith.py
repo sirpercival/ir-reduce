@@ -21,21 +21,21 @@ def im_add(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
     outputimg = im1.data + im2.data
-    im_write(outputfile, outputimage, finalheader)
+    write_fits(outputfile, outputimage, finalheader)
     return finalheader, outputimg
 
 def im_divide(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
     outputimg = im1.data / im2.data
-    im_write(outputfile, outputimage, finalheader)
+    write_fits(outputfile, outputimage, finalheader)
     return finalheader, outputimg
 
 def im_minimum(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
     outputimg = fmin(im1, im2)
-    im_write(outputfile, outputimg, finalheader)
+    write_fits(outputfile, outputimg, finalheader)
     return finalheader, outputimg
 
 def minmax(data):
@@ -45,12 +45,13 @@ def im_subtract(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
     outputimg = im1.data - im2.data
-    im_write(outputfile, outputimage, finalheader)
+    write_fits(outputfile, outputimage, finalheader)
     return finalheader, outputimg
 
 def medcombine(fitslist, outputfile = None):
     headers, images = grab_image_stack(fitslist)
     finalheader = headers[0]
+    print len(headers), len(finalheader)
     scale_ref = images[0]
     
     for i, im in enumerate(images[1:]):
@@ -62,7 +63,7 @@ def medcombine(fitslist, outputfile = None):
     
     images = array(images)
     medimage = median(images, axis=0)
-    im_write(outputfile, medimage, finalheader)
+    write_fits(outputfile, medimage, finalheader)
     return finalheader, medimage
 
 def scale_spec(ref, spec):
