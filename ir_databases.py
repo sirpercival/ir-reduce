@@ -29,6 +29,7 @@ def parse_filestring(filestring, stub, dithers = []):
                     files.append(j)
     images = [FitsImage((base + '.fits') % x) for x in files]
     dithers = [dither_pattern[x % 4] for x in range(len(files))]
+    print dithers
     
     return images
     
@@ -106,9 +107,10 @@ class ObsNight(object):
             output=path.join(self.calpath, self.date+'-Wavecal.fits')) \
             if kwargs.get('cals',False) else None
     
-    def add_target(self, **kwargs):
-        tmp = ObsTarget(**kwargs)
-        tmp.files = parse_filestring(path.join(self.rawpath,self.filestub))
-        self.targets[tmp.targid] = tmp
+    def add_target(self, target):
+        target.images = parse_filestring(target.filestring, \
+            path.join(self.rawpath,self.filestub), dithers = target.dither)
+        print target.dither
+        self.targets[target.targid] = target
     
     

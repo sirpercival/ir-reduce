@@ -34,7 +34,7 @@ fhdialog = '''
     auto_dismiss: False
     BoxLayout:
         orientation: 'vertical'
-        Scrollview:
+        ScrollView:
             do_scroll_x: False
             size_hint_y: 0.9
             BoxLayout:
@@ -116,7 +116,7 @@ atdialog = '''
     size_hint: 0.7, 0.4
     BoxLayout:
         orientation: 'vertical'
-        Scrollview:
+        ScrollView:
             GridLayout:
                 cols: 2
                 col_default_height: '40dp'
@@ -169,7 +169,7 @@ fitdialog = '''
     size_hint: 0.7, 0.4
     BoxLayout:
         orientation: 'vertical'
-        Scrollview:
+        ScrollView:
             GridLayout:
                 cols: 2
                 col_default_height: '40dp'

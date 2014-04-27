@@ -153,6 +153,10 @@ class ObservingScreen(IRScreen):
     current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
     file_list = ListProperty([])
     
+    def __init__(self, **kwargs):
+        super(ObservingScreen, self).__init__(**kwargs)
+        self.waiting = WaitingDialog(text='Please wait while the calibration images build, thank you!')
+    
     def on_enter(self):
         idb = shelve.open(instrumentdb)
         self.instrument_list = idb.keys()
@@ -211,6 +215,7 @@ class ObservingScreen(IRScreen):
             self.ids.outpath.text = self.current_obsnight.outpath
             self.ids.calpath.text = self.current_obsnight.calpath
             self.ids.fformat.text = self.current_obsnight.filestub
+            self.set_filelist()
         rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
             rdb[night] = self.current_obsrun.get_night(night)
@@ -266,27 +271,26 @@ class ObservingScreen(IRScreen):
             return
         caltype = self.ids.caltypes.text
         flist = self.ids.calfiles.text
-        popup = WaitingDialog(text='Please wait while the calibration images build, thank you!')
-        popup.open()
+        self.waiting.open()
         if caltype == 'Flats (lamps ON)':
             t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.flaton, flist, \
-                self.current_obsnight.date+'-FlatON.fits', popup))
+                self.current_obsnight.date+'-FlatON.fits'))
             t.start()
         elif caltype == 'Flats (lamps OFF)':
             t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.flatoff, flist, \
-                self.current_obsnight.date+'-FlatOFF.fits', popup))
+                self.current_obsnight.date+'-FlatOFF.fits'))
             t.start()
         elif caltype == 'Arc Lamps':
             t = Thread(target = self.imstack_wrapper, args=(self.current_obsnight.cals, flist, \
-                self.current_obsnight.date+'-Wavecal.fits', popup))
+                self.current_obsnight.date+'-Wavecal.fits'))
             t.start()
             
-    def imstack_wrapper(self, target, flist, outp, pup):
+    def imstack_wrapper(self, target, flist, outp):
         raw = self.current_obsnight.rawpath
         cal = self.current_obsnight.calpath
         stub = self.current_obsnight.filestub
         target = image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
-        pup.dismiss()
+        self.waiting.dismiss()
     
     def save_night(self):
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
@@ -302,11 +306,12 @@ class ObservingScreen(IRScreen):
     
     def add_target(self):
         popup = AddTarget(instrumentlist = self.instrument_list)
-        popup.bind(on_dismiss= self.update_targets(popup.target_args))
         popup.open()
+        popup.bind(on_dismiss = lambda x: self.update_targets(popup.target_args) \
+            if popup.target_args else None)
     
     def update_targets(self, targs):
-        self.current_target = ObsTarget(targs, night=self.current_obsnight)
+        self.current_target = ObsTarget(night=self.current_obsnight, **targs)
         self.current_obsnight.add_target(self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
         self.ids.targs.text = self.current_target.targid
@@ -318,8 +323,10 @@ class ObservingScreen(IRScreen):
     def set_filelist(self):
         self.ids.obsfiles.clear_widgets()
         self.file_list = []
+        print self.current_target.dither
         for file, dither in zip(self.current_target.images, self.current_target.dither):
-            tmp = ObsfileInsert(obsfile = self.current_obsnight.rawpath+file, dithertype = dither)
+            tmp = ObsfileInsert(obsfile = file, dithertype = dither)
+            print tmp
             self.file_list.append(tmp)
             self.ids.obsfiles.add_widget(tmp)
     
