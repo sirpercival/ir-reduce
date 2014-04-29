@@ -33,7 +33,8 @@ def parse_filestring(filestring, stub):
     return images, dithers
     
 def image_stack(flist, stub, output = 'imstack.fits'):
-    imlist = [x.fitsfile for x, junk in parse_filestring(flist, stub)]
+    imlist, junk = parse_filestring(flist, stub)
+    imlist = [x.fitsfile for x in imlist]
     comb = medcombine(imlist, outputfile = output)
     tmp = FitsImage(output)
     tmp.flist = flist

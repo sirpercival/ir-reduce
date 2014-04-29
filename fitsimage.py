@@ -39,7 +39,7 @@ def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
 
 def grab_header(file):
     hdul = fits.open(file)
-    hdul.verify('silentfix')
+    print hdul.verify('silentfix')
     header = hdul[0].header
     hdul.close()
     return header

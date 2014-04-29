@@ -7,6 +7,7 @@ from kivy.uix.textinput import TextInput
 from kivy.graphics.vertex_instructions import Point
 from kivy.animation import Animation
 from kivy.uix.image import Image
+from astropy.io.fits.card import Undefined
 
 from os import path
 import gc
@@ -22,7 +23,7 @@ fhdialog = '''
         size_hint_x: 0.2
     TextInput:
         multiline: False
-        text: root.value[0]
+        text: root.value
         size_hint_x: 0.3
     TextInput:
         multiline: False
@@ -36,6 +37,7 @@ fhdialog = '''
         orientation: 'vertical'
         ScrollView:
             do_scroll_x: False
+            do_scroll_y: True
             size_hint_y: 0.9
             BoxLayout:
                 id: box
@@ -61,7 +63,8 @@ class FitsHeaderDialog(Popup):
     def on_open(self):
         h = self.fitsimage.header
         for cardkey in h:
-            card = FitsCard(key = cardkey, value = str(h[cardkey]), \
+            val = ' ' if isinstance(h[cardkey], Undefined) else str(h[cardkey])
+            card = FitsCard(key = cardkey, value = val, \
                 comment = h.comments[cardkey])
             self.cards.append(card)
             self.ids.box.add_widget(card)
@@ -317,7 +320,7 @@ waitingkv = '''
         Widget:
         AnchorLayout:
             size_hint: 1, 1
-            Image:
+            AsyncImage:
                 id: loadimage
                 size_hint: None, None
                 size: '128dp', '128dp'
