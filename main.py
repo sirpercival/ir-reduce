@@ -56,9 +56,9 @@ class BorderBox(BoxLayout):
 class ObsfileInsert(BoxLayout):
     obsfile = ObjectProperty(None)
     dithertype = StringProperty('')
-    
+
     def launch_header(self):
-        header_viewer = FitsHeaderDialog(fitsimage = obsfile)
+        header_viewer = FitsHeaderDialog(fitsimage = self.obsfile)
         header_viewer.open()
 
 class SpecscrollInsert(BoxLayout):
@@ -323,10 +323,8 @@ class ObservingScreen(IRScreen):
     def set_filelist(self):
         self.ids.obsfiles.clear_widgets()
         self.file_list = []
-        print self.current_target.dither
         for file, dither in zip(self.current_target.images, self.current_target.dither):
             tmp = ObsfileInsert(obsfile = file, dithertype = dither)
-            print tmp
             self.file_list.append(tmp)
             self.ids.obsfiles.add_widget(tmp)
     

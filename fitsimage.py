@@ -37,6 +37,13 @@ def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
         return data_min, data_max
     return zmin, zmax
 
+def grab_header(file):
+    hdul = fits.open(file)
+    hdul.verify('silentfix')
+    header = hdul[0].header
+    hdul.close()
+    return header
+
 class ScalableImage(object):
     def __init__(self):
         self.data_array = np.array([])
@@ -94,7 +101,7 @@ class FitsImage(ScalableImage):
     def __init__(self, fitsfile, header = None):
         super(FitsImage, self).__init__()
         self.fitsfile = fitsfile
-        self.header = fits.getheader(fitsfile, 0) if not header else header
+        self.header = grab_header(fitsfile) if not header else header
     
     def load(self, **kwargs):
         hdu = fits.open(self.fitsfile)

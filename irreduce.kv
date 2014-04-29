@@ -1,7 +1,7 @@
 #:kivy 1.8.0
 #:import Factory kivy.factory.Factory
 #:import re re
-#import FadeTransition kivy.screenmanager.FadeTransition
+#:import path os.path
 
 <ActionSpinnerOptions@SpinnerOption>
     background_color: .4, .4, .4, 1
@@ -53,16 +53,17 @@
     orientation: 'horizontal'
     size_hint: 1, 0.3
     Label:
-        text: root.obsfile.fitsfile
-        size_hint_x: 0.5
+        text: path.basename(root.obsfile.fitsfile)
     Spinner:
         id: spnr
         text: root.dithertype
         values: ['A', 'B', 'X']
         on_text: root.dithertype = self.text
+        size_hint_x: 0.1
     Button:
         text: 'Header'
-        on_press: self.launch_header()
+        on_press: root.launch_header()
+        size_hint_x: 0.4
 
 <SpecscrollInsert>:
     orientation: 'horizontal'

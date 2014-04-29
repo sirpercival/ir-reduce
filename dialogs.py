@@ -22,7 +22,7 @@ fhdialog = '''
         size_hint_x: 0.2
     TextInput:
         multiline: False
-        text: root.value
+        text: root.value[0]
         size_hint_x: 0.3
     TextInput:
         multiline: False
@@ -50,7 +50,7 @@ Builder.load_string(fhdialog)
 
 class FitsCard(BoxLayout):
     key = StringProperty('KEY')
-    value = StringProperty('Value')
+    value = StringProperty(['Value'])
     comment = StringProperty('Comment')
     
 
@@ -61,7 +61,7 @@ class FitsHeaderDialog(Popup):
     def on_open(self):
         h = self.fitsimage.header
         for cardkey in h:
-            card = FitsCard(key = cardkey, value = h[cardkey], \
+            card = FitsCard(key = cardkey, value = str(h[cardkey]), \
                 comment = h.comments[cardkey])
             self.cards.append(card)
             self.ids.box.add_widget(card)

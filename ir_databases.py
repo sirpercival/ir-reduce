@@ -10,7 +10,7 @@ reg = placeholder+'+'
 
 dither_pattern = ['A', 'B', 'B', 'A']
 
-def parse_filestring(filestring, stub, dithers = []):
+def parse_filestring(filestring, stub):
     if len(re.findall(reg, stub)) != 1:
         raise ValueError("File format is not valid; must use '#' as placeholder only")
     spot = re.search(reg, stub)
@@ -29,12 +29,11 @@ def parse_filestring(filestring, stub, dithers = []):
                     files.append(j)
     images = [FitsImage((base + '.fits') % x) for x in files]
     dithers = [dither_pattern[x % 4] for x in range(len(files))]
-    print dithers
     
-    return images
+    return images, dithers
     
 def image_stack(flist, stub, output = 'imstack.fits'):
-    imlist = [x.fitsfile for x in parse_filestring(flist, stub)]
+    imlist = [x.fitsfile for x, junk in parse_filestring(flist, stub)]
     comb = medcombine(imlist, outputfile = output)
     tmp = FitsImage(output)
     tmp.flist = flist
@@ -108,9 +107,8 @@ class ObsNight(object):
             if kwargs.get('cals',False) else None
     
     def add_target(self, target):
-        target.images = parse_filestring(target.filestring, \
-            path.join(self.rawpath,self.filestub), dithers = target.dither)
-        print target.dither
+        target.images, target.dither = parse_filestring(target.filestring, \
+            path.join(self.rawpath,self.filestub))
         self.targets[target.targid] = target
     
     
