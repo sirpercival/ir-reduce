@@ -61,27 +61,22 @@ class FitsCard(BoxLayout):
 class FitsHeaderDialog(Popup):
     fitsimage = ObjectProperty(None)
     cards = ListProperty([])
-    vtypes = ListProperty([])
     
     def on_open(self):
         h = self.fitsimage.header
         self.ids.box.height = str(30*len(h.cards))+'dp'
         for cardkey in h:
-            if isinstance(h[cardkey], Undefined):
-                val = ' ' 
-                self.vtypes.append(Undefined)
-            else:
-                val = str(h[cardkey])
-                self.vtypes.append(type(h[cardkey]))
+            val = ' ' if isinstance(h[cardkey], Undefined) else str(h[cardkey])
             card = FitsCard(key = cardkey, value = val, \
                 comment = h.comments[cardkey])
             self.cards.append(card)
             self.ids.box.add_widget(card)
     
     def update_header(self):
+        h = self.fitsimage.header
         for i, card in enumerate(self.cards):
-            self.fitsimage.header.set(card.key, \
-                self.vtypes[i](card.value), card.comment)
+            val = type(h[card.key])(card.value) if card.key in h else card.value
+            self.fitsimage.header.set(card.key, val, card.comment)
         self.dismiss()
                 
 dcdialog = '''
