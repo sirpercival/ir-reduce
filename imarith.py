@@ -20,15 +20,15 @@ def grab_image_stack(imlist):
 def im_add(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
-    outputimg = im1.data + im2.data
-    write_fits(outputfile, finalheader, outputimage)
+    outputimg = im1.data_array + im2.data_array
+    write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
 
 def im_divide(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
-    outputimg = im1.data / im2.data
-    write_fits(outputfile, finalheader, outputimage)
+    outputimg = im1.data_array / im2.data_array
+    write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
 
 def im_minimum(im1, im2, outputfile = None):
@@ -44,8 +44,8 @@ def minmax(data):
 def im_subtract(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
-    outputimg = im1.data - im2.data
-    write_fits(outputfile, finalheader, outputimage)
+    outputimg = im1.data_array - im2.data_array
+    write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
 
 def medcombine(fitslist, outputfile = None):

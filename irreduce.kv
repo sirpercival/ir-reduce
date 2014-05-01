@@ -291,7 +291,6 @@
     paths: app.current_paths
     current_target: app.current_target
     current_flats: app.current_flats
-    pairstrings: ['%s - %s' % (x.fitsfile for x in y) for y in app.extract_pairs]
     BoxLayout:
         orientation: 'vertical'
         size_hint_x: 0.4
@@ -394,7 +393,6 @@
     theapp: app
     paths: app.current_paths
     extract_pairs: app.extract_pairs
-    pairstrings: ['%s - %s' % (x.fitsfile for x in y) for y in self.extract_pairs]
     BoxLayout:
         orientation: 'vertical'
         size_hint_x: 0.4

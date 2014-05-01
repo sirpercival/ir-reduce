@@ -39,9 +39,11 @@ fhdialog = '''
             do_scroll_x: False
             do_scroll_y: True
             size_hint_y: 0.9
+            scroll_wheel_distance: '30dp'
             BoxLayout:
                 id: box
                 orientation: 'vertical'
+                size_hint_y: None
         Button:
             text: 'Save & Close'
             on_press: root.update_header()
@@ -59,19 +61,27 @@ class FitsCard(BoxLayout):
 class FitsHeaderDialog(Popup):
     fitsimage = ObjectProperty(None)
     cards = ListProperty([])
+    vtypes = ListProperty([])
     
     def on_open(self):
         h = self.fitsimage.header
+        self.ids.box.height = str(30*len(h.cards))+'dp'
         for cardkey in h:
-            val = ' ' if isinstance(h[cardkey], Undefined) else str(h[cardkey])
+            if isinstance(h[cardkey], Undefined):
+                val = ' ' 
+                self.vtypes.append(Undefined)
+            else:
+                val = str(h[cardkey])
+                self.vtypes.append(type(h[cardkey]))
             card = FitsCard(key = cardkey, value = val, \
                 comment = h.comments[cardkey])
             self.cards.append(card)
             self.ids.box.add_widget(card)
     
     def update_header(self):
-        for card in self.cards:
-            self.fitsimage.header[card.key] = (card.value, card.comment)
+        for i, card in enumerate(self.cards):
+            self.fitsimage.header.set(card.key, \
+                self.vtypes[i](card.value), card.comment)
         self.dismiss()
                 
 dcdialog = '''

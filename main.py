@@ -58,8 +58,12 @@ class ObsfileInsert(BoxLayout):
     dithertype = StringProperty('')
 
     def launch_header(self):
-        header_viewer = FitsHeaderDialog(fitsimage = self.obsfile)
-        header_viewer.open()
+        self.header_viewer = FitsHeaderDialog(fitsimage = self.obsfile)
+        self.header_viewer.bind(on_dismiss = self.update_header())
+        self.header_viewer.open()
+    
+    def update_header(self):
+        self.obsfile.header = self.header_viewer.fitsimage.header
 
 class SpecscrollInsert(BoxLayout):
     active = BooleanProperty(True)
@@ -171,7 +175,9 @@ class ObservingScreen(IRScreen):
     def on_pre_leave(self):
         theapp = App.get_running_app()
         pairs = pair_dithers(self.current_target.dither)
-        theapp.extract_pairs = [(self.current_target.images[x] for x in y) for y in pairs]
+        tmp = [(self.current_target.images[x] for x in y) for y in pairs]
+        print tmp
+        theapp.extract_pairs = [[self.current_target.images[x] for x in y] for y in pairs]
         theapp.current_target = self.current_target
         theapp.current_paths = {'cal':self.current_obsnight.calpath, 
             'raw':self.current_obsnight.rawpath, 'out':self.current_obsnight.outpath}
@@ -365,19 +371,20 @@ class ExtractRegionScreen(IRScreen):
     
     def on_enter(self):
         flat = path.join(self.paths['cal'],'Flat.fits')
-        if theapp.current_night.flaton:
-            if theapp.current_night.flatoff:
-                im_subtract(theapp.current_night.flaton, \
-                    theapp.current_night.flatoff, outfile = flat)
+        if self.theapp.current_night.flaton:
+            if self.theapp.current_night.flatoff:
+                im_subtract(self.theapp.current_night.flaton, \
+                    self.theapp.current_night.flatoff, outfile = flat)
             else:
-                write_fits(flat, theapp.current_night.flaton.header, \
-                    theapp.current_night.flaton.data_array)
+                write_fits(flat, self.theapp.current_night.flaton.header, \
+                    self.theapp.current_night.flaton.data_array)
             self.current_flats = FitsImage(flat)
             self.current_flats.load()
+        self.pairstrings = ['{0} - {1}'.format(*[x.fitsfile for x in y]) for y in self.extract_pairs]
     
     def on_pre_leave(self):
-        theapp.current_impair = self.current_impair
-        theapp.current_flats = self.current_flats
+        self.theapp.current_impair = self.current_impair
+        self.theapp.current_flats = self.current_flats
     
     def set_imagepair(self, val):
         pair_index = self.pairstrings.index(val)
@@ -388,7 +395,7 @@ class ExtractRegionScreen(IRScreen):
             if self.current_flats:
                 im1 = im_divide(im1, self.current_flats)
                 im2 = im_divide(im2, self.current_flats)
-            im_subtract(im1, im2, outfile=fitsfile)
+            im_subtract(im1, im2, outputfile=fitsfile)
         self.current_impair = FitsImage(fitsfile)
         self.current_impair.load()
         self.ids.ipane.load_data(self.current_impair)
@@ -439,6 +446,10 @@ class TracefitScreen(IRScreen):
     fit_params = DictProperty({})
     trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,0]),MeshLinePlot(color=[0,1,1,0])])
     current_flats = ObjectProperty(None)
+    
+    def on_enter(self):
+        self.pairstrings = ['%s - %s' % (x.fitsfile for x in y) for y \
+            in App.get_running_app().extract_pairs]
     
     def set_imagepair(self, val):
         self.pair_index = self.pairstrings.index(val)
@@ -561,7 +572,7 @@ class TracefitScreen(IRScreen):
             im2 = im_divide(im2, self.current_flats)
         im1.data_array = undistort_imagearray(im1.data_array, pdistort)
         im2.data_array = undistort_imagearray(im2.data_array, ndistort)
-        im_subtract(im1, im2, outfile=self.current_impair.fitsfile)
+        im_subtract(im1, im2, outputfile=self.current_impair.fitsfile)
         tmp = self.current_impair
         self.current_impair = FitsImage(self.current_impair.fitsfile)
         self.current_impair.header['EXREGX1'] = (tmp.get_header_keyword('EXREGX1'), 'extraction region coordinate X1')
