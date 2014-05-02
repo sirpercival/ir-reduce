@@ -54,7 +54,7 @@ Builder.load_string(fhdialog)
 
 class FitsCard(BoxLayout):
     key = StringProperty('KEY')
-    value = StringProperty(['Value'])
+    value = StringProperty('Value')
     comment = StringProperty('Comment')
     
 
@@ -75,8 +75,15 @@ class FitsHeaderDialog(Popup):
     def update_header(self):
         h = self.fitsimage.header
         for i, card in enumerate(self.cards):
-            val = type(h[card.key])(card.value) if card.key in h else card.value
-            self.fitsimage.header.set(card.key, val, card.comment)
+            if card.key in h:
+                if isinstance(h[card.key], Undefined):
+                    val = Undefined()
+                else:
+                    t = type(h[card.key])
+                    val = t(card.value)
+            else:
+                val = card.value
+            self.fitsimage.header[card.key] = (val, card.comment)
         self.dismiss()
                 
 dcdialog = '''
