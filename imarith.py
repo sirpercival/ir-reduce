@@ -44,6 +44,7 @@ def minmax(data):
 def im_subtract(im1, im2, outputfile = None):
     if im1.header:
         finalheader = im1.header
+        
     outputimg = im1.data_array - im2.data_array
     write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
@@ -101,7 +102,8 @@ def pair_dithers(ditherlist):
 def write_fits(outputfile, header, data):
     if not outputfile:
         return
-    outfits = fits.PrimaryHDU(data, header=header)
+    outfits = fits.PrimaryHDU(data)
+    outfits.header = header
     outfits.writeto(outputfile, output_verify='ignore')
     
 def gen_colors(n):

@@ -176,7 +176,6 @@ class ObservingScreen(IRScreen):
         theapp = App.get_running_app()
         pairs = pair_dithers(self.current_target.dither)
         tmp = [(self.current_target.images[x] for x in y) for y in pairs]
-        print tmp
         theapp.extract_pairs = [[self.current_target.images[x] for x in y] for y in pairs]
         theapp.current_target = self.current_target
         theapp.current_paths = {'cal':self.current_obsnight.calpath, 
@@ -380,7 +379,7 @@ class ExtractRegionScreen(IRScreen):
                     self.theapp.current_night.flaton.data_array)
             self.current_flats = FitsImage(flat)
             self.current_flats.load()
-        self.pairstrings = ['{0} - {1}'.format(*[x.fitsfile for x in y]) for y in self.extract_pairs]
+        self.pairstrings = ['{0} - {1}'.format(*[path.basename(x.fitsfile) for x in y]) for y in self.extract_pairs]
     
     def on_pre_leave(self):
         self.theapp.current_impair = self.current_impair
@@ -400,6 +399,11 @@ class ExtractRegionScreen(IRScreen):
         self.current_impair.load()
         self.ids.ipane.load_data(self.current_impair)
         self.imwid, self.imht = self.current_impair.dimensions
+        if self.current_impair.get_header_keyword('EXREGX1'):
+            for x in ['x1', 'y1', 'x2', 'y2']:
+                tmp = self.current_impair.get_header_keyword('EXREG'+x.upper())
+                print tmp[0]
+                self.set_coord(x, tmp)
     
     def get_coords(self):
         xscale = float(self.imcanvas.width) / float(self.imwid)
@@ -448,9 +452,9 @@ class TracefitScreen(IRScreen):
     current_flats = ObjectProperty(None)
     
     def on_enter(self):
-        self.pairstrings = ['%s - %s' % (x.fitsfile for x in y) for y \
-            in App.get_running_app().extract_pairs]
-    
+        self.pairstrings = ['{0} - {1}'.format(*[path.basename(x.fitsfile) for x in y]) \
+            for y in App.get_running_app().extract_pairs]
+            
     def set_imagepair(self, val):
         self.pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
@@ -460,7 +464,7 @@ class TracefitScreen(IRScreen):
             popup.open()
             return
         self.current_impair = FitsImage(fitsfile)
-        self.region = self.current_impair.get_header_keyword(['EXREG' + x for x in ['X1','Y1','X2','Y2']])
+        self.region = self.current_impair.get_header_keyword(*('EXREG' + x for x in ['X1','Y1','X2','Y2']))
         if not any(self.region):
             popup = WarningDialog(text='You have to select an extraction'\
                 'region for this image pair \nbefore you can move on to this step.')
