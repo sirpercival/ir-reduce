@@ -198,13 +198,13 @@ fitdialog = '''
                     text: 'Expected FWHM (in px):'
                 TextInput:
                     id: fit_wid
-                    text: 5
+                    text: '5'
                     multiline: False
                 Label:
                     text: 'Degree of fit:'
                 TextInput:
                     id: fit_deg
-                    text: 2
+                    text: '2'
                     multiline: False
                 Label:
                     text: 'Manually define trace?'

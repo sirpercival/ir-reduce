@@ -75,6 +75,7 @@ class ApertureSlider(BoxLayout):
     slider = ObjectProperty(None)
     trash = ObjectProperty(None)
     plot_points = ListProperty([])
+    tfscreen = ObjectProperty(None)
     
     def fix_line(self, val):
         top_y = interp_x(self.plot_points, val)
@@ -402,8 +403,7 @@ class ExtractRegionScreen(IRScreen):
         if self.current_impair.get_header_keyword('EXREGX1'):
             for x in ['x1', 'y1', 'x2', 'y2']:
                 tmp = self.current_impair.get_header_keyword('EXREG'+x.upper())
-                print tmp[0]
-                self.set_coord(x, tmp)
+                self.set_coord(x, tmp[0])
     
     def get_coords(self):
         xscale = float(self.imcanvas.width) / float(self.imwid)
@@ -485,24 +485,28 @@ class TracefitScreen(IRScreen):
         reg[2] = reg[2] - reg[0]
         reg[3] = reg[3] - reg[1]
         self.iregion = self.itexture.get_region(*reg)
-        dims = idlhash(self.extractregion.shape,[0.4,0.6], list=True)
-        self.tracepoints = robm(self.extractregion[dims[0],dims[1]], axis = self.trace_axis)
-        self.tplot.points = zip(range(len(tracepoints.tolist())), tracepoints.tolist())
+        dims = [[0,0],list(self.extractregion.shape)]
+        dims[0][self.trace_axis] = 0.4 * self.extractregion.shape[self.trace_axis]
+        dims[1][self.trace_axis] = 0.6 * self.extractregion.shape[self.trace_axis]
+        self.tracepoints = robm(self.extractregion[dims[0][0]:dims[1][0]+1,\
+            dims[0][1]:dims[1][1]+1], axis = self.trace_axis)
+        self.tplot.points = zip(range(len(self.tracepoints)), self.tracepoints)
         self.drange = minmax(self.tracepoints)
         self.ids.the_graph.add_plot(self.tplot)
     
     def add_postrace(self):
         peaks = find_peaks(self.tracepoints, len(self.apertures['pos'])+1, \
             tracedir = self.trace_axis)
-        new_peak = peaks[-1]
-        plot = MeshLinePlot(color=[0,1,0,1], \
-            points=[(new_peak, 0), (new_peak, self.tracepoints[new_peak])])
+        new_peak = float(peaks[-1])
+        peakheight = interp_x(self.tplot.points, new_peak)
+        print new_peak, peakheight
+        plot = MeshLinePlot(color=[0,1,0,1], points=[(new_peak, 0), (new_peak, peakheight)])
         self.ids.the_graph.add_plot(plot)
-        newspin = ApertureSlider(aperture_line = plot)
+        newspin = ApertureSlider(aperture_line = plot, tfscreen = self)
         newspin.slider.range = [0, len(self.tracepoints)-1]
         newspin.slider.step = 0.1
         newspin.slider.value = new_peak
-        newspin.button.bind(on_press = self.remtrace('pos',newspin))
+        newspin.trash.bind(on_press = lambda x: self.remtrace('pos',newspin))
         self.ids.postrace.add_widget(newspin)
         self.apertures['pos'].append(newspin)
         
@@ -513,11 +517,11 @@ class TracefitScreen(IRScreen):
         plot = MeshLinePlot(color=[0,1,0,1], \
             points=[(new_peak, 0), (new_peak, self.tracepoints[new_peak])])
         self.ids.the_graph.add_plot(plot)
-        newspin = ApertureSlider(aperture_line = plot)
+        newspin = ApertureSlider(aperture_line = plot, tfscreen = self)
         newspin.slider.range = [0, len(self.tracepoints)-1]
         newspin.slider.step = 0.1
-        newspin.slider.value = new_peak
-        newspin.button.bind(on_press = self.remtrace('neg',newspin))
+        newspin.slider.value = float(new_peak)
+        newspin.trash.bind(on_press = lambda x: self.remtrace('neg',newspin))
         self.ids.negtrace.add_widget(newspin)
         self.apertures['neg'].append(newspin)
     

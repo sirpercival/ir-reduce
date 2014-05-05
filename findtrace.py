@@ -10,13 +10,12 @@ from scipy.interpolate import interp1d, griddata
 posneg = {'pos':np.greater, 'neg':np.less}
 
 def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
-    if tracedir is None and len(idata.shape) > 1: #check for 2D array
-        tracedir = 1 #assume that the second axis is the right one...
-    if tracedir is not None:
+    data = np.array(idata) #make sure we're dealing with an array
+    if len(data.shape) > 1: #check for 2D array
+        if traceder is None:
+            tracedir = 1 #assume that the second axis is the right one...
         #if idata is 2D, compress along the trace using a robust mean
-        data = robm(idata, axis = tracedir)
-    else:
-        data = idata
+        data = robm(data, axis = tracedir)
         
     data = medfilt(data, 5) #a little smoothness never hurt
     

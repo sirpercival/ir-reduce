@@ -23,14 +23,18 @@
 <ApertureSlider>:
     slider: sl
     trash: bu
-    plot_points: tfscreen.tplot.points
+    plot_points: root.tfscreen.tplot.points
     Slider:
         id: sl
         on_value: root.fix_line(self.value)
-    Button:
-        id: bu
-        background_normal: 'atlas://resources/buttons/gc-normal'
-        background_down: 'atlas://resources/buttons/gc-pressed'
+    AnchorLayout:
+        size_hint: 0.25, 1
+        Button:
+            id: bu
+            background_normal: 'atlas://resources/buttons/gc-normal'
+            background_down: 'atlas://resources/buttons/gc-pressed'
+            size_hint: None, None
+            size: 24, 24
 
 <BorderBox>:
     padding: self.borderweight
@@ -298,10 +302,10 @@
             text: 'Choose an image pair:'
             values: root.pairstrings
             on_text: root.set_imagepair(self.text)
-            size_hint: 1, 0.1
+            size_hint: 1, 0.15
         BoxLayout:
             orientation: 'horizontal'
-            size_hint_y: 0.1
+            size_hint_y: 0.15
             Label:
                 text: 'Positive Apertures:'
             Button:
@@ -311,7 +315,7 @@
                 size: 24, 24
                 on_press: root.add_postrace()
         BorderBox:
-            size_hint_y: 0.25
+            size_hint_y: 0.35
             ScrollView:
                 do_scroll_x: False
                 effect_cls: Factory.DampedScrollEffect
@@ -322,7 +326,7 @@
                     row_default_height: 24
         BoxLayout:
             orientation: 'horizontal'
-            size_hint_y: 0.1
+            size_hint_y: 0.15
             Label:
                 text: 'Negative Apertures:'
             Button:
@@ -332,7 +336,7 @@
                 size: 24, 24
                 on_press: root.add_negtrace()
         BorderBox:
-            size_hint_y: 0.25
+            size_hint_y: 0.35
             ScrollView:
                 do_scroll_x: False
                 effect_cls: Factory.DampedScrollEffect
@@ -342,7 +346,7 @@
                     spacing: [0,3]
                     row_default_height: 24
         GridLayout:
-            size_hint_y: 0.2
+            size_hint_y: 0.3
             cols: 2
             Button:
                 text: 'Set Fit (1)'
@@ -356,12 +360,12 @@
             Button:
                 text: 'Extract Spectrum (5)'
                 on_press: root.extract_spectrum()
+        Widget:
     BoxLayout:
         orientation: 'vertical'
         size_hint_x: 0.6
         Graph:
             id: the_graph
-            size_hint_y: 0.7
             xlabel: 'Pixel'
             ylabel: 'Mean Counts'
             x_ticks_minor: 5
@@ -380,6 +384,7 @@
             ymax: root.drange[1]
             label_options: {'bold': True}
         StencilView:
+            size_hint_y: 0.7
             canvas.before:
                 Rectangle:
                     size: self.size

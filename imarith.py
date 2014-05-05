@@ -39,7 +39,7 @@ def im_minimum(im1, im2, outputfile = None):
     return finalheader, outputimg
 
 def minmax(data):
-    return nanmin(data), nanmax(data)
+    return float(nanmin(data)), float(nanmax(data))
 
 def im_subtract(im1, im2, outputfile = None):
     if im1.header:
