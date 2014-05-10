@@ -29,14 +29,21 @@ def robust_sigma(inputdata, sigcut = 3.0, axis = None):
     return np.nanstd(data, axis = axis)
 
 def interp_x(points, targ_x):
+    fpoints = interp_nan(points)
     x, y = zip(*points)
     x = np.array(x)
     y = np.array(y)
-    #deal with nans that will otherwise screw up the interpolation
-    nans, x2 = np.isnan(y), lambda z: z.nonzero()[0]
-    y[nans] = interp1d(x2(~nans), y[~nans], kind='cubic')(x2(nans))
     f = interp1d(x, y, kind='cubic')
     return f(targ_x)
+
+def interp_nan(points):
+    #use interpolation to remove nans
+    x, y = zip(*points)
+    x = np.array(x)
+    y = np.array(y)
+    nans, x2 = np.isnan(y), lambda z: z.nonzero()[0]
+    y[nans] = interp1d(x2(~nans), y[~nans], kind='linear')(x2(nans))
+    return zip(x, y)
     
 def idlhash(a, b, list = False):
     c = np.outer(a,b)

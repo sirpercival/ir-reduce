@@ -2,7 +2,7 @@ from astropy.modeling import functional_models as fm, fitting, \
     SummedCompositeModel, polynomial as poly
 from scipy.signal import argrelextrema, medfilt
 import numpy as np
-from robuststats import robust_mean as robm, robust_sigma as robs
+from robuststats import robust_mean as robm, robust_sigma as robs, interp_nan
 from copy import deepcopy
 from scipy.interpolate import interp1d, griddata
 
@@ -14,16 +14,19 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     if len(data.shape) > 1: #check for 2D array
         if traceder is None:
             tracedir = 1 #assume that the second axis is the right one...
-        #if idata is 2D, compress along the trace using a robust mean
+            #if idata is 2D, compress along the trace using a robust mean
         data = robm(data, axis = tracedir)
         
+    ps = zip(range(data.size), data)
+    junk, data = zip(*interp_nan(ps)) #remove nans via interpolation
     data = medfilt(data, 5) #a little smoothness never hurt
-    
-    #find /all/ rel maxima:
+    print data
+    #find /all/ rel extrema:
     maxima = argrelextrema(data, posneg[pn])
     max_val = data[maxima]
     
-    priority = np.argsort(max_val)
+    priority = np.argsort(-np.fabs(max_val))
+    print max_val
     return maxima[priority[:npeak]]
 
 model_types = {'gauss':fm.Gaussian1D, 'lorentz':fm.Lorentz1D}
