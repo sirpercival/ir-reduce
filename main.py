@@ -22,7 +22,7 @@ from comboedit import ComboEdit
 from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
 from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace, WaitingDialog
 from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, scale_spec, combine_spectra
-from robuststats import robust_mean as robm, interp_x, idlhash
+from robuststats import robust_mean as robm, interp_x, idlhash, med_normal
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
 import shelve, uuid, glob, copy, re
@@ -476,7 +476,8 @@ class TracefitScreen(IRScreen):
             size = self.current_impair.dimensions)
         self.trace_axis = 0 if get_tracedir(self.current_target.instrument_id) == 'vertical' else 1
         reg = self.region
-        self.extractregion = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        tmp = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        self.extractregion = med_normal(tmp)
         if not self.trace_axis:
             self.extractregion = self.extractregion.transpose()
             self.trace_axis = 1
@@ -497,9 +498,9 @@ class TracefitScreen(IRScreen):
     def add_postrace(self):
         peaks = find_peaks(self.tracepoints, len(self.apertures['pos'])+1, \
             tracedir = self.trace_axis)
-        new_peak = float(peaks[-1])
+        #new_peak = float(peaks[-1])
+        new_peak = float(peaks)
         peakheight = interp_x(self.tplot.points, new_peak)
-        print new_peak, peakheight
         plot = MeshLinePlot(color=[0,1,0,1], points=[(new_peak, 0), (new_peak, peakheight)])
         self.ids.the_graph.add_plot(plot)
         newspin = ApertureSlider(aperture_line = plot, tfscreen = self)
@@ -513,14 +514,15 @@ class TracefitScreen(IRScreen):
     def add_negtrace(self):
         peaks = find_peaks(self.tracepoints, len(self.apertures['neg'])+1, \
             tracedir = self.trace_axis, pn='neg')
-        new_peak = peaks[-1]
-        plot = MeshLinePlot(color=[0,1,0,1], \
-            points=[(new_peak, 0), (new_peak, self.tracepoints[new_peak])])
+        #new_peak = float(peaks[-1])
+        new_peak = float(peaks)
+        peakheight = interp_x(self.tplot.points, new_peak)
+        plot = MeshLinePlot(color=[1,0,0,1], points=[(new_peak, 0), (new_peak, peakheight)])
         self.ids.the_graph.add_plot(plot)
         newspin = ApertureSlider(aperture_line = plot, tfscreen = self)
         newspin.slider.range = [0, len(self.tracepoints)-1]
         newspin.slider.step = 0.1
-        newspin.slider.value = float(new_peak)
+        newspin.slider.value = new_peak
         newspin.trash.bind(on_press = lambda x: self.remtrace('neg',newspin))
         self.ids.negtrace.add_widget(newspin)
         self.apertures['neg'].append(newspin)
@@ -542,14 +544,14 @@ class TracefitScreen(IRScreen):
         self.fit_params = args
         
     def fit_trace(self):
-        if not self.fit_params:
+        if not self.fit_params or self.fit_params['shape'] not in ('Gaussian','Lorentzian'):
             popup = WarningDialog(text='Make sure you set up your fit parameters!')
             popup.open()
             return
         pos = {'pos':[x.slider.value for x in self.apertures['pos']], \
             'neg':[x.slider.value for x in self.apertures['neg']]}
         for x in self.trace_lines:
-            if x in self.the_graph.plots:
+            if x in self.ids.the_graph.plots:
                 self.the_graph.remove_plot(x)
         if self.fit_params.get('man',False):
             popup = DefineTrace(npos=len(self.apertures['pos']), \
@@ -560,8 +562,10 @@ class TracefitScreen(IRScreen):
         self.xx, self.fitparams['pmodel'], self.fitparams['nmodel'] = \
             fit_multipeak(self.tracepoints, pos = pos, wid = self.fit_params['wid'], \
             ptype = self.fit_params['shape'])
-        self.trace_line.points = zip(self.xx, self.fmodel(xx))
-        self.the_graph.add_plot(self.trace_line)
+        self.trace_lines[0].points = zip(self.xx, self.fitparams['pmodel'](self.xx))
+        self.trace_lines[1].points = zip(self.xx, self.fitparams['nmodel'](self.yy))
+        self.ids.the_graph.add_plot(self.trace_lines[0])
+        self.ids.the_graph.add_plot(self.trace_lines[1])
         
     def fix_distort(self):
         if not (self.fit_params.get('pmodel',False) or \
