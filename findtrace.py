@@ -31,28 +31,41 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     
     priority = np.argsort(-np.fabs(max_val))
     return maxima[priority[:npeak]]
-
-def multi_peak_gauss(x, amplitudes = [1.], means = [0.], sigmas = [1.]):
+    
+def multi_peak_model(mtype, npeak):
     #astropy can't fit composite models, so we have to make our own
-    y = np.zeros_like(x)
-    mt = fm.Gaussian1D
-    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
-    for i,a in enumerate(amplitudes):
-        model = mt(a, means[i], sigmas[i])
-        y += model(x)
-    return y
+    mt = {'Gaussian':fm.Gaussian1D, 'Lorentzian':fm.Lorentz1D}[mtype]
+    amps, means, sigs = (np.zeros(npeak) for x in xrange(3))
+    def the_model_func(x, amplitudes=amps, means=means, sigmas=sigs):
+        y = np.zeros_like(x)
+        assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+        for i,a in enumerate(amplitudes):
+            model = mt(a, means[i], sigmas[i])
+            y += model(x)
+        return y
+    return the_model_func
 
-def multi_peak_lorentz(x, amplitudes = [1.], means = [0.], sigmas = [1.]):
-    #astropy can't fit composite models, so we have to make our own
-    y = np.zeros_like(x)
-    mt = fm.Lorentz1D
-    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
-    for i,a in enumerate(amplitudes):
-        model = mt(a, means[i], sigmas[i])
-        y += model(x)
-    return y
+#def multi_peak_gauss(x, amplitudes = None, means = None, sigmas = None):
+#    #astropy can't fit composite models, so we have to make our own
+#    y = np.zeros_like(x)
+#    mt = fm.Gaussian1D
+#    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+#    for i,a in enumerate(amplitudes):
+#        model = mt(a, means[i], sigmas[i])
+#        y += model(x)
+#    return y
 
-model_types = {'Gaussian':multi_peak_gauss, 'Lorentzian':multi_peak_lorentz}
+#def multi_peak_lorentz(x, amplitudes = None, means = None, sigmas = None):
+#    #astropy can't fit composite models, so we have to make our own
+#    y = np.zeros_like(x)
+#    mt = fm.Lorentz1D
+#    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+#    for i,a in enumerate(amplitudes):
+#        model = mt(a, means[i], sigmas[i])
+#        y += model(x)
+#    return y
+
+#model_types = {'Gaussian':multi_peak_gauss, 'Lorentzian':multi_peak_lorentz}
 fitmethod = fitting.NonLinearLSQFitter()
 
 def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
@@ -75,8 +88,9 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     #    pmodels.append(model_types[ptype](amps[0][i], pos['pos'][i], wid))
     #pmodel_init = SummedCompositeModel(pmodels)
     # --> New method: using Custom1D since astropy can't fit composite models
-    basemodel = fm.custom_model_1d(model_types[ptype])
-    pmodel_init = basemodel(amplitudes=amps[0], means=pos['pos'], \
+    #basemodel = fm.custom_model_1d(model_types[ptype])
+    pbasemodel = fm.custom_model_1d(multi_peak_model(ptype, len(amps[0])))
+    pmodel_init = pbasemodel(amplitudes=amps[0], means=pos['pos'], \
         sigmas = [wid for x in xrange(len(amps[0]))])
     pdata = np.clip(idata, a_min=med, a_max=np.nanmax(idata))
     print dir(pmodel_init.fixed)
@@ -85,7 +99,8 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     #for i in range(npeak[1]):
     #    nmodels.append(model_types[ptype](amps[1][i], pos['neg'][i], wid))
     #nmodel_init = SummedCompositeModel(nmodels)
-    nmodel_init = basemodel(amplitudes=amps[1], means = pos['neg'], \
+    nbasemodel = fm.custom_model_1d(multi_peak_model(ptype, len(amps[1])))
+    nmodel_init = nbasemodel(amplitudes=amps[1], means = pos['neg'], \
         sigmas = [wid for x in xrange(len(amps[0]))])
     ndata = np.clip(idata, a_max=med, a_min=np.nanmin(idata))
     
