@@ -17,7 +17,6 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
             #if idata is 2D, compress along the trace using a robust mean
         data = robm(data, axis = tracedir)
     #since argrelextrema isn't working, just return argmax
-    print pn, data.argmax(), data.argmin()
     if pn == 'pos':
         return np.nanargmax(data)
     else:
@@ -31,21 +30,30 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     max_val = data[maxima]
     
     priority = np.argsort(-np.fabs(max_val))
-    print max_val
     return maxima[priority[:npeak]]
 
-model_types = {'Gaussian':fm.Gaussian1D, 'Lorentzian':fm.Lorentz1D}
-fitmethod = fitting.NonLinearLSQFitter()
-
-def multi_peak_model(x, amplitudes = [1.], means = [0.], sigmas = [1.], shape='Gaussian'):
+def multi_peak_gauss(x, amplitudes = [1.], means = [0.], sigmas = [1.]):
     #astropy can't fit composite models, so we have to make our own
     y = np.zeros_like(x)
-    mt = model_types.get(shape, model_types['Gaussian'])
+    mt = fm.Gaussian1D
     assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
     for i,a in enumerate(amplitudes):
         model = mt(a, means[i], sigmas[i])
         y += model(x)
     return y
+
+def multi_peak_lorentz(x, amplitudes = [1.], means = [0.], sigmas = [1.]):
+    #astropy can't fit composite models, so we have to make our own
+    y = np.zeros_like(x)
+    mt = fm.Lorentz1D
+    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+    for i,a in enumerate(amplitudes):
+        model = mt(a, means[i], sigmas[i])
+        y += model(x)
+    return y
+
+model_types = {'Gaussian':multi_peak_gauss, 'Lorentzian':multi_peak_lorentz}
+fitmethod = fitting.NonLinearLSQFitter()
 
 def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     if pos is None:
@@ -67,22 +75,18 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     #    pmodels.append(model_types[ptype](amps[0][i], pos['pos'][i], wid))
     #pmodel_init = SummedCompositeModel(pmodels)
     # --> New method: using Custom1D since astropy can't fit composite models
-    pmodel_init = fm.custom_model_1d(multi_peak_model)
-    pmodel_init.shape = ptype
-    pmodel_init.amplitudes = amps[0]
-    pmodel_init.means = pos['pos']
-    pmodel_init.sigmas = [wid for x in xrange(len(amps[0]))]
+    basemodel = fm.custom_model_1d(model_types[ptype])
+    pmodel_init = basemodel(amplitudes=amps[0], means=pos['pos'], \
+        sigmas = [wid for x in xrange(len(amps[0]))])
     pdata = np.clip(idata, a_min=med, a_max=np.nanmax(idata))
+    print dir(pmodel_init.fixed)
     
     #nmodels = []
     #for i in range(npeak[1]):
     #    nmodels.append(model_types[ptype](amps[1][i], pos['neg'][i], wid))
     #nmodel_init = SummedCompositeModel(nmodels)
-    nmodel_init = fm.custom_model_1d(multi_peak_model)
-    nmodel_init.shape = ptype
-    nmodel_init.amplitudes = amps[1]
-    nmodel_init.means = pos['neg']
-    nmodel_init.sigmas = [wid for x in xrange(len(amps[0]))]
+    nmodel_init = basemodel(amplitudes=amps[1], means = pos['neg'], \
+        sigmas = [wid for x in xrange(len(amps[0]))])
     ndata = np.clip(idata, a_max=med, a_min=np.nanmin(idata))
     
     return x_data, fitmethod(pmodel_init, x_data, pdata), \

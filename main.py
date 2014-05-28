@@ -387,6 +387,10 @@ class ExtractRegionScreen(IRScreen):
         self.theapp.current_flats = self.current_flats
     
     def set_imagepair(self, val):
+        if not self.theapp.current_target:
+            popup = WarningDialog(text='You need to select a target (on the Observing Screen) before proceeding!')
+            popup.open()
+            return
         pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
         if not path.isfile(fitsfile):
@@ -395,8 +399,8 @@ class ExtractRegionScreen(IRScreen):
             if self.current_flats:
                 im1 = im_divide(im1, self.current_flats)
                 im2 = im_divide(im2, self.current_flats)
-            im_subtract(im1, im2, outputfile=fitsfile)
-        self.current_impair = FitsImage(fitsfile)
+            im_subtract(im1, im2, outputfile=path.join(self.paths['out'],fitsfile))
+        self.current_impair = FitsImage(path.join(self.paths['out'],fitsfile))
         self.current_impair.load()
         self.ids.ipane.load_data(self.current_impair)
         self.imwid, self.imht = self.current_impair.dimensions
@@ -456,6 +460,10 @@ class TracefitScreen(IRScreen):
             for y in App.get_running_app().extract_pairs]
             
     def set_imagepair(self, val):
+        if not App.get_running_app().current_target:
+            popup = WarningDialog(text='You need to select a target (on the Observing Screen) before proceeding!')
+            popup.open()
+            return
         self.pair_index = self.pairstrings.index(val)
         fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
         if not path.isfile(fitsfile):
