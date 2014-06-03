@@ -19,25 +19,34 @@ from kivy.graphics.texture import Texture
 from imagepane import ImagePane, default_image
 from fitsimage import FitsImage
 from comboedit import ComboEdit
-from ir_databases import InstrumentProfile, ObsRun, ObsTarget, ObsNight, ExtractedSpectrum, image_stack
+import ir_databases as ird
 from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace, WaitingDialog
 from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, scale_spec, combine_spectra
 from robuststats import robust_mean as robm, interp_x, idlhash, med_normal
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
+from kivy.storage.jsonstore import JsonStore
 import shelve, uuid, glob, copy, re
 from os import path
 from threading import Thread
 
-instrumentdb = 'storage/instrumentprofiles'
-obsrundb = 'storage/observingruns'
-linelistdb = 'storage/linelists'
+instrumentdb = JsonStore('storage/instrumentprofiles.json')
+obsrundb = JsonStore('storage/observingruns.json')
+linelistdb = JsonStore('storage/linelists.json')
 
 def get_tracedir(inst):
-    idb = shelve.open(instrumentdb)
-    out = idb[inst].tracedir
-    idb.close()
-    return out
+    return instrumentdb.get(inst).tracedir
+    #idb = shelve.open(instrumentdb)
+    #out = idb[inst].tracedir
+    #idb.close()
+    #return out
+    
+def update_ntuple(ntuple, field, newval):
+    t = type(ntuple)
+    tmp = ntuple._asdict()
+    for i, f in enumerate(field):
+        tmp[f] = newval[i]
+    return t(**tmp)
 
 class BorderBox(BoxLayout):
     borderweight = NumericProperty(2)
@@ -89,23 +98,24 @@ class IRScreen(Screen):
             return self.ids.content.add_widget(*args)
         return super(IRScreen, self).add_widget(*args)
 
-blank_instrument = {'direction':'horizontal', 'dimensions':(1024, 1024), \
-    'header':{'exp':'EXPTIME', 'air':'AIRMASS', 'type':'IMAGETYP'}, \
-    'description':'Instrument Profile Description'} 
+#blank_instrument = {'direction':'horizontal', 'dimensions':(1024, 1024), \
+#    'header':{'exp':'EXPTIME', 'air':'AIRMASS', 'type':'IMAGETYP'}, \
+#    'description':'Instrument Profile Description'} 
 
 class InstrumentScreen(IRScreen):
     saved_instrument_names = ListProperty([])
     saved_instruments = ListProperty([])
     instrument_list = ListProperty([])
     current_text = StringProperty('')
-    current_instrument = ObjectProperty(InstrumentProfile(instid='', **blank_instrument))
+    current_instrument = ObjectProperty(ird.InstrumentProfile())
     trace_direction = StringProperty('horizontal')
     
     def on_pre_enter(self):
-        idb = shelve.open(instrumentdb)
+        #idb = shelve.open(instrumentdb)
+        idb = instrumentdb
         self.saved_instrument_names = sorted(idb.keys())
-        self.saved_instruments = [idb[s] for s in self.saved_instrument_names]
-        idb.close()
+        self.saved_instruments = [ird.InstrumentProfile(**idb[s]) for s in self.saved_instrument_names]
+        #idb.close()
         self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
             for x in self.saved_instrument_names]
     
@@ -115,8 +125,7 @@ class InstrumentScreen(IRScreen):
             ind = self.saved_instrument_names.index(self.current_text)
             self.current_instrument = self.saved_instruments[ind]
         except ValueError:
-            self.current_instrument = InstrumentProfile(instid=self.current_text, \
-                **blank_instrument)
+            self.current_instrument = ird.InstrumentProfile(instid=self.current_text)
         self.ids.trace_h.state = 'down' if self.current_instrument.tracedir == 'horizontal' else 'normal'
         self.ids.trace_v.state = 'down' if self.current_instrument.tracedir == 'vertical' else 'normal'
         self.ids.xdim.text = str(self.current_instrument.dimensions[0])
@@ -128,34 +137,30 @@ class InstrumentScreen(IRScreen):
     
     def save_instrument(self):
         args = {'instid':self.current_text, 'dimensions':(int(self.ids.xdim.text), 
-            int(self.ids.ydim.text)), 'direction':'horizontal' \
+            int(self.ids.ydim.text)), 'tracedir':'horizontal' \
             if self.ids.trace_h.state == 'down' else 'vertical', \
-            'description':self.ids.idesc.text, 'header':{'exp':self.ids.etime.text, \
+            'description':self.ids.idesc.text, 'headerkeys':{'exp':self.ids.etime.text, \
                 'air':self.ids.secz.text, 'type':self.ids.itype.text}}
-        new_instrument = InstrumentProfile(**args)
+        new_instrument = ird.InstrumentProfile(**args)
         self.current_instrument = new_instrument
-        idb = shelve.open(instrumentdb)
-        idb[new_instrument.instid] = new_instrument
-        idb.close()
+        #idb = shelve.open(instrumentdb)
+        #idb[new_instrument.instid] = new_instrument
+        #idb.close()
+        instrumentdb[new_instrument.instid] = new_instrument._asdict()
         self.on_pre_enter()
-
-        
-blank_night = {'filestub':'', 'rawpath':'', 'outpath':'', 'calpath':'', \
-    'flaton':None, 'flatoff':None, 'cals':None}
-blank_target = {'files':'', 'iid':''}
     
 class ObservingScreen(IRScreen):
     obsids = DictProperty({})
     obsrun_list = ListProperty([])
     obsrun_buttons = ListProperty([])
-    current_obsrun = ObjectProperty(ObsRun(runid=''))
+    current_obsrun = ObjectProperty(ird.ObsRun())
     obsnight_list = ListProperty([])
     obsnight_buttons = ListProperty([])
-    current_obsnight = ObjectProperty(ObsNight(date='', **blank_night))
+    current_obsnight = ObjectProperty(ird.ObsNight())
     instrument_list = ListProperty([])
     caltype = StringProperty('')
     target_list = ListProperty([])
-    current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
+    current_target = ObjectProperty(ird.ObsTarget())
     file_list = ListProperty([])
     
     def __init__(self, **kwargs):
@@ -163,13 +168,15 @@ class ObservingScreen(IRScreen):
         self.waiting = WaitingDialog(text='Please wait while the calibration images build, thank you!')
     
     def on_enter(self):
-        idb = shelve.open(instrumentdb)
-        self.instrument_list = idb.keys()
-        idb.close()
-        odb = shelve.open(obsrundb)
-        self.obsids = {x:odb[x] for x in odb}
+        #idb = shelve.open(instrumentdb)
+        #self.instrument_list = idb.keys()
+        #idb.close()
+        self.instrument_list = instrumentdb.keys()
+        #odb = shelve.open(obsrundb)
+        odb = obsrundb
+        self.obsids = {x:odb[x][x] for x in odb}
         self.obsrun_list = odb.keys()
-        odb.close()
+        #odb.close()
         self.obsrun_buttons = [Button(text=x, size_hint_y = None, height = 30) \
             for x in self.obsrun_list]
     
@@ -187,20 +194,21 @@ class ObservingScreen(IRScreen):
         run_id = self.ids.obsrun.text
         if run_id not in self.obsids:
             while True:
-                run_db = 'storage/'+str(uuid.uuid4())
+                run_db = 'storage/'+str(uuid.uuid4())+'.json'
                 if not glob.glob(run_db+'*'):
                     break
             self.obsids[run_id] = run_db
-            odb = shelve.open(obsrundb)
-            odb[run_id] = run_db
-            odb.close()
+            #odb = shelve.open(obsrundb)
+            obsrundb[run_id] = {run_id:run_db}
+            #odb.close()
         else:
             run_db = self.obsids[run_id]
-        self.current_obsrun = ObsRun(runid=run_id)
-        rdb = shelve.open(run_db)
-        for r in rdb:
-            self.current_obsrun.addnight(rdb[r])
-        rdb.close()
+        self.current_obsrun = ird.ObsRun(runid=run_id)
+        self.rdb = JsonStore(run_db)
+        #rdb = shelve.open(run_db)
+        for r in self.rdb:
+            ird.add_to(self.current_obsrun, ird.ObsNight(**self.rdb[r]))
+        #rdb.close()
         self.obsnight_list = self.current_obsrun.nights.keys()
         self.obsnight_buttons = [Button(text=x, size_hint_y = None, height = 30) \
             for x in self.obsnight_list]
@@ -213,19 +221,22 @@ class ObservingScreen(IRScreen):
             self.obsnight_list.append(night_id)
             self.obsnight_buttons.append(Button(text = night_id, \
                 size_hint_y = None, height = 30))
-            self.current_obsnight = ObsNight(date = night_id, **blank_night)
-            self.current_obsrun.addnight(self.current_obsnight)
+            self.current_obsnight = ird.ObsNight(date = night_id)
+            #self.current_obsrun.addnight(self.current_obsnight)
+            ird.add_to(self.current_obsrun, self.current_obsnight)
         else:
-            self.current_obsnight = self.current_obsrun.get_night(night_id)
+            #self.current_obsnight = self.current_obsrun.get_night(night_id)
+            ird.get_from(self.current_obsnight, night_id)
             self.ids.rawpath.text = self.current_obsnight.rawpath
             self.ids.outpath.text = self.current_obsnight.outpath
             self.ids.calpath.text = self.current_obsnight.calpath
             self.ids.fformat.text = self.current_obsnight.filestub
             self.set_filelist()
-        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            rdb[night] = self.current_obsrun.get_night(night)
-        rdb.close()
+            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict()
+        #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
     
     def pick_rawpath(self):
@@ -234,14 +245,12 @@ class ObservingScreen(IRScreen):
         popup.open()
     
     def setpath(self, which, dir):
+        self.current_obsnight = update_ntuple(self.current_obsnight, [which+'path',], [dir,])
         if which == 'raw':
-            self.current_obsnight.rawpath = dir
             self.ids.rawpath.text = dir
         elif which == 'out':
-            self.current_obsnight.outpath = dir
             self.ids.outpath.text = dir
         elif which == 'cal':
-            self.current_obsnight.calpath = dir
             self.ids.calpath.text = dir
         
     def pick_outpath(self):
@@ -261,7 +270,7 @@ class ObservingScreen(IRScreen):
             popup = WarningDialog(text = "File format is not valid; must use '#' as placeholder only")
             popup.open()
             return
-        self.current_obsnight.filestub = stub
+        self.current_obsnight = update_ntuple(self.current_obsnight, ['filestub',], [stub,]) 
     
     def set_caltype(self, caltype):
         if caltype == 'Flats (lamps ON)':
@@ -300,10 +309,11 @@ class ObservingScreen(IRScreen):
     
     def save_night(self):
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
-        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            rdb[night] = self.current_obsrun.get_night(night)
-        rdb.close()
+            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict()
+        #rdb.close()
         
     def set_target(self):
         target_id = self.ids.targs.text
@@ -317,14 +327,15 @@ class ObservingScreen(IRScreen):
             if popup.target_args else None)
     
     def update_targets(self, targs):
-        self.current_target = ObsTarget(night=self.current_obsnight, **targs)
-        self.current_obsnight.add_target(self.current_target)
+        self.current_target = ird.ObsTarget(night=self.current_obsnight, **targs)
+        ird.add_to(self.current_obsnight, self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
         self.ids.targs.text = self.current_target.targid
         self.set_filelist()
-        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
-        rdb[self.current_obsnight.date] = self.current_obsnight
-        rdb.close()
+        #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
+        self.rdb[self.current_obsnight.date] = self.current_obsnight._asdict()
+        #rdb.close()
     
     def set_filelist(self):
         self.ids.obsfiles.clear_widgets()
@@ -335,15 +346,16 @@ class ObservingScreen(IRScreen):
             self.ids.obsfiles.add_widget(tmp)
     
     def save_target(self):
-        self.current_target.dither = [x.dithertype for x in self.file_list]
-        self.current_target.notes = self.ids.tnotes.text
+        self.current_target = update_ntuple(self.current_target, ['dither', 'notes'], \
+            [[x.dithertype for x in self.file_list], self.ids.tnotes.text])
         #just make sure everything is propagating correctly
         self.current_obsnight.targets[self.current_target.targid] = self.current_target
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
-        rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
+        #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            rdb[night] = self.current_obsrun.get_night(night)
-        rdb.close()
+            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict
+        #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
 
 class ExtractRegionScreen(IRScreen):
@@ -454,13 +466,14 @@ class TracefitScreen(IRScreen):
     fit_params = DictProperty({})
     trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,0]),MeshLinePlot(color=[0,1,1,0])])
     current_flats = ObjectProperty(None)
+    theapp = ObjectProperty(None)
     
     def on_enter(self):
         self.pairstrings = ['{0} - {1}'.format(*[path.basename(x.fitsfile) for x in y]) \
-            for y in App.get_running_app().extract_pairs]
+            for y in theapp.extract_pairs]
             
     def set_imagepair(self, val):
-        if not App.get_running_app().current_target:
+        if not theapp.current_target:
             popup = WarningDialog(text='You need to select a target (on the Observing Screen) before proceeding!')
             popup.open()
             return
@@ -583,9 +596,8 @@ class TracefitScreen(IRScreen):
             return
         pdistort, ndistort = draw_trace(self.extractregion, self.xx, self.fitparams['pmodel'], \
             self.fitparams['nmodel'], fixdistort = True, fitdegree = self.fitparams['deg'])
-        the_app = App.get_running_app()
         
-        im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
+        im1, im2 = [x for x in copy.deepcopy(theapp.extract_pairs[self.pair_index])]
         im1.load(); im2.load()
         if self.current_flats:
             im1 = im_divide(im1, self.current_flats)
@@ -616,11 +628,10 @@ class TracefitScreen(IRScreen):
             return
         
         #need a calibration, too
-        the_app = App.get_running_app()
         self.lamp = None
-        if the_app.current_night.cals:
-            self.lamp = the_app.current_night.cals.data_array if not self.current_flats \
-                else im_divide(the_app.current_night.cals, self.current_flats).data_array
+        if theapp.current_night.cals:
+            self.lamp = theapp.current_night.cals.data_array if not self.current_flats \
+                else im_divide(theapp.current_night.cals, self.current_flats).data_array
             self.lamp = self.lamp[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
         im1.load(); im2.load()
@@ -665,11 +676,11 @@ class WavecalScreen(IRScreen):
     linelist_buttons = ListProperty([])
     
     def on_enter(self):
-        lldb = shelve.open('storage/linelists')
-        self.linelists = lldb.keys()
+        #lldb = shelve.open(linelistdb)
+        self.linelists = linelistdb.keys()
         self.linelist_buttons = [Button(text=x, size_hint_y = None, height = 30) \
-            for x in lldb]
-        lldb.close()
+            for x in linelistdb]
+        #lldb.close()
     
     def set_spectrum(self, spec):
         self.spec_index = self.speclist.index(spec)
@@ -721,9 +732,9 @@ class WavecalScreen(IRScreen):
             return
         niter = self.ids.numiter.text
         if self.linelist in self.linelists:
-            lldb = shelve.open('storage/linelists')
-            linelist_path = lldb[self.lineslist]
-            lldb.close()
+            #lldb = shelve.open('storage/linelists')
+            linelist_path = linelistdb[self.lineslist]
+            #lldb.close()
         else:
             linelist_path = self.linelist
         self.calibration = calibrate_wavelength(calib, linelist_path, (self.wmin, self.wmax), niter)
@@ -820,8 +831,8 @@ class IRReduceApp(App):
     index = NumericProperty(-1)
     screen_names = ListProperty([])
     extract_pairs = ListProperty([])
-    current_night = ObjectProperty(ObsNight(date='', **blank_night))
-    current_target = ObjectProperty(ObsTarget(targid='', **blank_target))
+    current_night = ObjectProperty(ird.ObsNight())
+    current_target = ObjectProperty(ird.ObsTarget())
     current_paths = DictProperty({})
     current_impair = ObjectProperty(None)
     current_flats = ObjectProperty(None)

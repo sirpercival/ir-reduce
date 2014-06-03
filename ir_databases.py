@@ -5,6 +5,18 @@ from numpy import dtype, vstack
 from astropy.io import fits
 from os import path
 
+from collections import namedtuple, Mapping
+
+def namedtuple_with_defaults(typename, field_names, default_values=[]):
+    T = namedtuple(typename, field_names)
+    T.__new__.__defaults__ = (None,) * len(T._fields)
+    if isinstance(default_values, Mapping):
+        prototype = T(**default_values)
+    else:
+        prototype = T(*default_values)
+    T.__new__.__defaults__ = tuple(prototype)
+    return T
+
 placeholder = '#'
 reg = placeholder+'+'
 
@@ -39,39 +51,42 @@ def image_stack(flist, stub, output = 'imstack.fits'):
     tmp = FitsImage(output)
     tmp.flist = flist
     return tmp
-    
-class ObsTarget(object):
-    def __init__(self, **kwargs):
-        self.targid = kwargs.get('id','')
-        self.instrument_id = kwargs.get('iid','')
-        self.filestring = kwargs.get('files','')
-        self.night = kwargs.get('night',None)
-        self.notes = ''
-        self.images = []
-        self.dither = []
-        self.spectra = []
 
-class InstrumentProfile(object):
-    def __init__(self, **kwargs):
-        self.instid = kwargs.get('instid','')
-        self.tracedir = kwargs.get('direction','horizontal')
-        self.dimensions = kwargs.get('dimensions',(1024,1024))
-        self.headerkeys = kwargs.get('header', {})
-        self.description = kwargs.get('description','')
+InstrumentProfile = namedtuple_with_defaults('InstrumentProfile',['instid', 'tracedir', \
+    'dimensions', 'headerkeys', 'description'], ['', 'horizontal', (1024,1024), \
+    {'exp':'EXPTIME', 'air':'AIRMASS', 'type':'IMAGETYP'}, ''])
 
-class ObsRun(object):
-    def __init__(self, **kwargs):
-        self.runid = kwargs.get('runid','')
-        self.nights = {}
+ObsRun = namedtuple_with_defaults('ObsRun', ['runid', 'nights'], ['',{}])
+
+ObsNight = namedtuple_with_defaults('ObsNight', ['date','targets','filestub','rawpath',\
+    'outpath','calpath','flaton','flatoff','cals'],['',{},'','','','',None,None,None])
     
-    def addnight(self, night):
-        if type(night) is ObsNight:
-            self.nights[night.date] = night
+ObsTarget = namedtuple_with_defaults('ObsTarget',['targid', 'instrument_id', 'filestring', \
+    'night', 'notes', 'images', 'dither', 'spectra'], ['','','',None,'',[],[],[]])
+
+def add_to(data, element):
+    if isinstance(data, ObsRun):
+        if isinstance(element, ObsNight):
+            data.nights[element.date] = element
         else:
-            self.nights[night['date']] = ObsNight(**night)
-    
-    def get_night(self, nightid):
-        return self.nights.get(nightid, None)
+            data.nights[element['date']] = ObsNight(**element)
+        return True
+    elif isinstance(data, ObsNight):
+        if not isinstance(element, ObsTarget):
+            element = ObsTarget(**element)
+        element.images, element.dither = parse_filestring(element.filestring, \
+                path.join(data.rawpath, data.filestub))
+        data.targets[element.targid] = target
+        return True
+    else:
+        return False
+        
+def get_from(data, index):
+    if isinstance(data, ObsRun):
+        return data.nights.get(index, None)
+    elif isinstance(data, ObsNight):
+        return data.targets.get(index, None)
+
 
 class ExtractedSpectrum(object):
     def __init__(self, specfile):
@@ -87,29 +102,5 @@ class ExtractedSpectrum(object):
         
     def update_fits(self):
         data = vstack((self.wav,self.spec)) if self.wav else self.spec
-        fits.update(self.file, data, self.header)
-
-class ObsNight(object):
-    def __init__(self, **kwargs):
-        self.date = kwargs.get('date','')
-        self.targets = {}
-        self.filestub = kwargs.get('filestub','')
-        self.rawpath = kwargs.get('rawpath','')
-        self.outpath = kwargs.get('outpath','')
-        self.calpath = kwargs.get('calpath','')
-        self.flaton = image_stack(flaton, path.join(self.rawpath, filestub), \
-            output=path.join(self.calpath, self.date+'-FlatON.fits')) \
-            if kwargs.get('flaton',False) else None
-        self.flatoff = image_stack(flatoff, path.join(self.rawpath, filestub), \
-            output=path.join(self.calpath, self.date+'-FlatOFF.fits')) \
-            if kwargs.get('flatoff',False) else None
-        self.cals = image_stack(cals, path.join(self.rawpath,filestub), \
-            output=path.join(self.calpath, self.date+'-Wavecal.fits')) \
-            if kwargs.get('cals',False) else None
-    
-    def add_target(self, target):
-        target.images, target.dither = parse_filestring(target.filestring, \
-            path.join(self.rawpath,self.filestub))
-        self.targets[target.targid] = target
-    
+        fits.update(self.file, data, self.header)    
     

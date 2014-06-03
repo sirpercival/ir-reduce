@@ -1,11 +1,12 @@
-from astropy.modeling import functional_models as fm, fitting, \
-    SummedCompositeModel, polynomial as poly
+from astropy.modeling import functional_models as fm, polynomial as poly, \
+    SummedCompositeModel, fitting
+from scipy.optimize import curve_fit
 from scipy.signal import argrelextrema, medfilt
 import numpy as np
 from robuststats import robust_mean as robm, robust_sigma as robs, interp_nan
 from copy import deepcopy
 from scipy.interpolate import interp1d, griddata
-
+from itertools import chain
 
 posneg = {'pos':np.greater, 'neg':np.less}
 
@@ -31,42 +32,49 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     
     priority = np.argsort(-np.fabs(max_val))
     return maxima[priority[:npeak]]
-    
+
+def get_individual_params(*params):
+    amplitudes = params[::3]
+    means = params[1::3]
+    sigmas = params[2::3]
+    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+    return amplitudes, means, sigmas
+
 def multi_peak_model(mtype, npeak):
-    #astropy can't fit composite models, so we have to make our own
     mt = {'Gaussian':fm.Gaussian1D, 'Lorentzian':fm.Lorentz1D}[mtype]
-    amps, means, sigs = (np.zeros(npeak) for x in xrange(3))
-    def the_model_func(x, amplitudes=amps, means=means, sigmas=sigs):
+    params = list(chain.from_iterable([(1., 0., 1.) for i in xrange(npeak)]))
+    def the_model_func(x, *params):
         y = np.zeros_like(x)
-        assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
+        amplitudes, means, sigmas = get_individual_params(*params)
         for i,a in enumerate(amplitudes):
             model = mt(a, means[i], sigmas[i])
             y += model(x)
         return y
     return the_model_func
 
-#def multi_peak_gauss(x, amplitudes = None, means = None, sigmas = None):
-#    #astropy can't fit composite models, so we have to make our own
-#    y = np.zeros_like(x)
-#    mt = fm.Gaussian1D
-#    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
-#    for i,a in enumerate(amplitudes):
-#        model = mt(a, means[i], sigmas[i])
-#        y += model(x)
-#    return y
-
-#def multi_peak_lorentz(x, amplitudes = None, means = None, sigmas = None):
-#    #astropy can't fit composite models, so we have to make our own
-#    y = np.zeros_like(x)
-#    mt = fm.Lorentz1D
-#    assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
-#    for i,a in enumerate(amplitudes):
-#        model = mt(a, means[i], sigmas[i])
-#        y += model(x)
-#    return y
-
-#model_types = {'Gaussian':multi_peak_gauss, 'Lorentzian':multi_peak_lorentz}
 fitmethod = fitting.NonLinearLSQFitter()
+
+def build_composite(custom_model, mtype):
+    base_model = {'Gaussian':fm.Gaussian1D, 'Lorentzian':fm.Lorentz1D}[mtype]
+    amp, mean, sig = get_individual_params(*custom_model)
+    models = [base_model(amp[i], mean[i], sig[i]) for i in xrange(len(amp))]
+    return SummedCompositeModel(models)
+
+def deconstruct_composite(model):
+    return [transform.parameters for transform in model._transforms]
+    #hopefully that works; if not, we'll do this
+    amp, mean, sig = [], [], []
+    for transform in model._transforms:
+        if isinstance(transform, fm.Gaussian1D):
+            a, m, s = transform.amplitude, transform.mean, transform.stddev
+        elif isinstance(transform, fm.Lorentz1D):
+            a, m, s = transform.amplitude, transform.x_0, transform.fwhm
+        else:
+            raise Exception('Unknown model type...')
+        amp.append(a)
+        mean.append(m)
+        sig.append(s)
+    return zip(amp, mean, sig)
 
 def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     if pos is None:
@@ -83,54 +91,51 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     
     #split into positive and negative so that we can differentiate between
     #the two original images
-    #pmodels = []
-    #for i in range(npeak[0]):
-    #    pmodels.append(model_types[ptype](amps[0][i], pos['pos'][i], wid))
-    #pmodel_init = SummedCompositeModel(pmodels)
-    # --> New method: using Custom1D since astropy can't fit composite models
-    #basemodel = fm.custom_model_1d(model_types[ptype])
-    pbasemodel = fm.custom_model_1d(multi_peak_model(ptype, len(amps[0])))
-    pmodel_init = pbasemodel(amplitudes=amps[0], means=pos['pos'], \
-        sigmas = [wid for x in xrange(len(amps[0]))])
+    pmodel = multi_peak_model(ptype, len(amps[0]))
+    pinit = list(chain.from_iterable(zip(amps[0], pos['pos'], \
+        [wid for x in xrange(len(amps[0]))])))
     pdata = np.clip(idata, a_min=med, a_max=np.nanmax(idata))
-    print dir(pmodel_init.fixed)
+    p_fit, p_tmp = curve_fit(pmodel, x_data, pdata, pinit)
     
-    #nmodels = []
-    #for i in range(npeak[1]):
-    #    nmodels.append(model_types[ptype](amps[1][i], pos['neg'][i], wid))
-    #nmodel_init = SummedCompositeModel(nmodels)
-    nbasemodel = fm.custom_model_1d(multi_peak_model(ptype, len(amps[1])))
-    nmodel_init = nbasemodel(amplitudes=amps[1], means = pos['neg'], \
-        sigmas = [wid for x in xrange(len(amps[0]))])
+    nmodel = multi_peak_model(ptype, len(amps[1]))
+    ninit = list(chain.from_iterable(zip(amps[1], pos['neg'], \
+        [wid for x in xrange(len(amps[0]))])))
     ndata = np.clip(idata, a_max=med, a_min=np.nanmin(idata))
+    n_fit, n_tmp = curve_fit(nmodel, x_data, ndata, ninit)
     
-    return x_data, fitmethod(pmodel_init, x_data, pdata), \
-        fitmethod(nmodel_init, x_data, ndata)
-
-def build_composite(custom_model):
-    base_model = model_types[custom_model.shape]
-    models = [base_model(custom_model.amplitudes[i], custom_model.means[i], \
-        custom_model.sigmas[i]) for i in xrange(len(custom_model.means))]
-    return SummedCompositeModel(models)
+    return x_data, build_composite(p_fit, ptype), build_composite(n_fit, ptype)
     
-def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2):
+def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptype = 'Gaussian'):
     ns = idata.shape[1]
     midpoint = ns/2
     tc1, tc2 = midpoint, midpoint + 1
-
+    fitp = deconstruct_composite(pfit)
+    fitn = deconstruct_composite(nfit)
+    p_amp, p_mean, p_sig = get_individual_params(fitp)
+    n_amp, n_mean, n_sig = get_individual_params(fitn)
+    np = len(p_mean)
+    nn = len(n_mean)
+    
     #back-convert the custom model into a composite model
-    fitp = build_composite(pfit)
-    fitn = build_composite(nfit)
+    #fitp = build_composite(pfit, ptype)
+    #fitn = build_composite(nfit, ptype)
 
-    trace = {'pos':[np.zeros(idata.shape) for _ in fitp._transforms], \
-        'neg':[np.zeros(idata.shape) for _ in fitn._transforms]}
-    apertures = {'pos':[range(ns) for _ in fitp._transforms], \
-        'neg':[range(ns) for _ in fitn._transforms]}
+    #trace = {'pos':[np.zeros(idata.shape) for _ in fitp._transforms], \
+    #    'neg':[np.zeros(idata.shape) for _ in fitn._transforms]}
+    #apertures = {'pos':[range(ns) for _ in fitp._transforms], \
+    #    'neg':[range(ns) for _ in fitn._transforms]}
+    trace = {'pos':[np.zeros(idata.shape) for _ in p_mean], \
+        'neg':[np.zeros(idata.shape) for _ in n_mean]}
+    apertures = {'pos':[range(ns) for _ in p_mean], \
+        'neg':[range(ns) for _ in n_mean]}
 
-    pcur1, ncur1 = deepcopy(fitp), deepcopy(fitn)
-    pcur2, ncur2 = deepcopy(fitp), deepcopy(fitn)
+    #pcur1, ncur1 = deepcopy(fitp), deepcopy(fitn)
+    #pcur2, ncur2 = deepcopy(fitp), deepcopy(fitn)
+    pmodel, nmodel = multi_peak_model(ptype, np), multi_peak_model(ptype, nn)
+    pcur1, ncur1 = deepcopy(pfit), deepcopy(nfit)
+    pcur2, ncur2 = deepcopy(pfit), deepcopy(nfit)
     down, up = True, True
-    while down and up:
+    while down or up:
         #work in both directions from the middle
         if tc1 >= 0:
             lb = max(tc1 - 20, 0)
@@ -140,14 +145,20 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2):
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur1:
-                pnew1 = fitmethod(pcur1, x_val, pdata)
-                for i, transform in enumerate(pnew1._transforms):
+                #pnew1 = fitmethod(pcur1, x_val, pdata)
+                pnew1, psig1 = curve_fit(pmodel, x_val, pdata, pcur1)
+                pnmodel = build_composite(pnew1, ptype)
+                #for i, transform in enumerate(pnew1._transforms):
+                for i, transform in enumerate(pnmodel._transforms):
                     trace['pos'][i][:,tc1] = transform(x_val)
                     apertures['pos'][i][tc1] = transform.mean
                 pcur1 = pnew1
             if ncur1:
-                nnew1 = fitmethod(ncur1, x_val, ndata)
-                for i, transform in enumerate(nnew1._transforms):
+                #nnew1 = fitmethod(ncur1, x_val, ndata)
+                nnew1, nsig1 = curve_fit(nmodel, x_val, ndata, ncur1)
+                nnmodel = build_composite(nnew1, ptype)
+                #for i, transform in enumerate(nnew1._transforms):
+                for i, transform in enumerate(nnmodel._transforms):
                     trace['neg'][i][:,tc1] = transform(x_val)
                     apertures['neg'][i][tc1] = transform.mean
                 ncur1 = nnew1
@@ -162,14 +173,20 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2):
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur2:
-                pnew2 = fitmethod(pcur2, x_val, pdata)
-                for i, transform in enumerate(pnew2._transforms):
+                #pnew2 = fitmethod(pcur2, x_val, pdata)
+                pnew2, psig2 = curve_fit(pmodel, x_val, pdata, pcur2)
+                pnmodel = build_composite(pnew2, ptype)
+                #for i, transform in enumerate(pnew2._transforms):
+                for i, transform in enumerate(pnmodel._transforms):
                     trace['pos'][i][:,tc2] = transform(x_val)
                     apertures['pos'][i][tc2] = transform.mean
                 pcur2 = pnew2
             if ncur2:
-                nnew2 = fitmethod(ncur2, x_val, ndata)
-                for i, transform in enumerate(nnew2._transforms):
+                #nnew2 = fitmethod(ncur2, x_val, ndata)
+                nnew2, nsig2 = curve_fit(nmodel, x_val, ndata, ncur2)
+                nnmodel = build_composite(nnew2, ptype)
+                #for i, transform in enumerate(nnew2._transforms):
+                for i, transform in enumerate(nnmodel._transforms):
                     trace['neg'][i][:,tc2] = transform(x_val)
                     apertures['neg'][i][tc2] = transform.mean
                 ncur2 = nnew2
@@ -192,6 +209,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2):
         pinit = poly.Polynomial1D(fitdegree)
         x_trace = np.arange(ns)
         posfit = fitmethod(pinit, x_trace, off_x)
+        posfit
     else: posfit = None
     
     if ncur1:
