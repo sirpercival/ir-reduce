@@ -310,8 +310,8 @@ class ObservingScreen(IRScreen):
     def save_night(self):
         tmp = self.current_obsrun.nights
         tmp[self.current_obsnight.date] = self.current_obsnight
-        update_ntuple(self.current_obsrun
-        ird.add_to(self.current_obsrun, self.current_obsnight)
+        update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        #ird.add_to(self.current_obsrun, self.current_obsnight)
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
