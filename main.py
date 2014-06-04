@@ -44,8 +44,7 @@ def get_tracedir(inst):
 def update_ntuple(ntuple, field, newval):
     t = type(ntuple)
     tmp = ntuple._asdict()
-    for i, f in enumerate(field):
-        tmp[f] = newval[i]
+    tmp.update(dict(zip(field, newval)))
     return t(**tmp)
 
 class BorderBox(BoxLayout):
@@ -206,8 +205,12 @@ class ObservingScreen(IRScreen):
         self.current_obsrun = ird.ObsRun(runid=run_id)
         self.rdb = JsonStore(run_db)
         #rdb = shelve.open(run_db)
-        for r in self.rdb:
-            ird.add_to(self.current_obsrun, ird.ObsNight(**self.rdb[r]))
+        tmp = dict([(str(self.rdb[r]['date']),ird.ObsNight(**self.rdb[r])) for r in self.rdb])
+        self.current_obsrun = update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        #for r in self.rdb:
+        #    tmp = ird.ObsNight(**self.rdb[r])
+        #    print tmp._asdict()
+        #    ird.add_to(self.current_obsrun, tmp)
         #rdb.close()
         self.obsnight_list = self.current_obsrun.nights.keys()
         self.obsnight_buttons = [Button(text=x, size_hint_y = None, height = 30) \
@@ -215,7 +218,8 @@ class ObservingScreen(IRScreen):
     
     def set_obsnight(self):
         night_id = self.ids.obsnight.text
-        if night_id == '' or self.current_obsrun.runid == '':
+        if night_id == '' or self.current_obsrun.runid == '' \
+                        or night_id == 'Observation Date':
             return
         if night_id not in self.obsnight_list:
             self.obsnight_list.append(night_id)
@@ -226,7 +230,7 @@ class ObservingScreen(IRScreen):
             ird.add_to(self.current_obsrun, self.current_obsnight)
         else:
             #self.current_obsnight = self.current_obsrun.get_night(night_id)
-            ird.get_from(self.current_obsnight, night_id)
+            self.current_obsnight = ird.get_from(self.current_obsrun, night_id)
             self.ids.rawpath.text = self.current_obsnight.rawpath
             self.ids.outpath.text = self.current_obsnight.outpath
             self.ids.calpath.text = self.current_obsnight.calpath
@@ -304,20 +308,20 @@ class ObservingScreen(IRScreen):
         raw = self.current_obsnight.rawpath
         cal = self.current_obsnight.calpath
         stub = self.current_obsnight.filestub
-        target = image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
+        target = ird.image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
         self.waiting.dismiss()
     
     def save_night(self):
         tmp = self.current_obsrun.nights
         tmp[self.current_obsnight.date] = self.current_obsnight
-        update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        self.current_obsrun = update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        #tmp = ird.ObsNight(**self.current_obsnight._asdict())
+        #self.current_obsrun.nights[tmp.date] = tmp
         #ird.add_to(self.current_obsrun, self.current_obsnight)
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            print ird.get_from(self.current_obsrun, night)._asdict()
             self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict()
-        print self.rdb._is_changed, self.rdb._data
         self.rdb.store_sync()
         #rdb.close()
         
@@ -334,7 +338,10 @@ class ObservingScreen(IRScreen):
     
     def update_targets(self, targs):
         self.current_target = ird.ObsTarget(night=self.current_obsnight, **targs)
-        ird.add_to(self.current_obsnight, self.current_target)
+        tmp = self.current_obsnight.targets
+        tmp[self.current_target.targid] = self.current_target
+        self.current_obsnight = update_ntuple(self.current_obsnight, ['targets',], [tmp,])
+        #ird.add_to(self.current_obsnight, self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
         self.ids.targs.text = self.current_target.targid
         self.set_filelist()

@@ -172,9 +172,9 @@ class AddTarget(Popup):
     instrumentlist = ListProperty([])
     
     def set_target(self):
-        self.target_args = {'id':self.ids.target_id.text, \
-            'iid':self.ids.target_instrument.text, \
-            'files':self.ids.target_files.text}
+        self.target_args = {'targid':self.ids.target_id.text, \
+            'instrument_id':self.ids.target_instrument.text, \
+            'filestring':self.ids.target_files.text}
         self.dismiss()
 
 fitdialog = '''

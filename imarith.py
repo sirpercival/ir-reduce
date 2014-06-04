@@ -104,7 +104,7 @@ def write_fits(outputfile, header, data):
         return
     outfits = fits.PrimaryHDU(data)
     outfits.header = header
-    outfits.writeto(outputfile, output_verify='ignore')
+    outfits.writeto(outputfile, output_verify='ignore', clobber=True)
     
 def gen_colors(n):
     '''generate a list of dissimilar colors'''
