@@ -59,7 +59,7 @@ InstrumentProfile = namedtuple_with_defaults('InstrumentProfile',['instid', 'tra
 ObsRun = namedtuple_with_defaults('ObsRun', ['runid', 'nights'], ['',{}])
 
 ObsNight = namedtuple_with_defaults('ObsNight', ['date','targets','filestub','rawpath',\
-    'outpath','calpath','flaton','flatoff','cals'],['',{},'','','','',None,None,None])
+    'outpath','calpath','flaton','flatoff','cals'],['',{},'','','','',[],[],[]])
     
 ObsTarget = namedtuple_with_defaults('ObsTarget',['targid', 'instrument_id', 'filestring', \
     'night', 'notes', 'images', 'dither', 'spectra'], ['','','',None,'',[],[],[]])

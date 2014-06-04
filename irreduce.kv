@@ -570,11 +570,18 @@
             text: 'Calibration Images'
             values: ['Flats (lamps ON)', 'Flats (lamps OFF)', 'Arc Lamps']
             on_text: root.set_caltype(self.text)
-        TextInput:
-            id: calfiles
-            text: '1-10'
+        BoxLayout:
+            orientation: 'horizontal'
             size_hint: 1, 0.125
-            multiline: False
+            TextInput:
+                id: calfiles
+                text: '1-10'
+                multiline: False
+                size_hint_x: 0.5
+                on_focus: if not self.focus: root.set_calfile(self.text)
+            Label:
+                id: calout
+                text: 'File not yet created'
         BoxLayout:
             size_hint: 1, 0.125
             Button:

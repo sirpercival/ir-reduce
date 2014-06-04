@@ -3,3 +3,4 @@
 *.pyc
 test*
 old_code.py
+storage/outdated/*

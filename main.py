@@ -41,11 +41,11 @@ def get_tracedir(inst):
     #idb.close()
     #return out
     
-def update_ntuple(ntuple, field, newval):
-    t = type(ntuple)
-    tmp = ntuple._asdict()
-    tmp.update(dict(zip(field, newval)))
-    return t(**tmp)
+#def update_ntuple(ntuple, field, newval):
+#    t = type(ntuple)
+#    tmp = ntuple._asdict()
+#    tmp.update(dict(zip(field, newval)))
+#    return t(**tmp)
 
 class BorderBox(BoxLayout):
     borderweight = NumericProperty(2)
@@ -206,7 +206,7 @@ class ObservingScreen(IRScreen):
         self.rdb = JsonStore(run_db)
         #rdb = shelve.open(run_db)
         tmp = dict([(str(self.rdb[r]['date']),ird.ObsNight(**self.rdb[r])) for r in self.rdb])
-        self.current_obsrun = update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        self.current_obsrun = self.current_obsrun._replace(nights=tmp)
         #for r in self.rdb:
         #    tmp = ird.ObsNight(**self.rdb[r])
         #    print tmp._asdict()
@@ -249,12 +249,14 @@ class ObservingScreen(IRScreen):
         popup.open()
     
     def setpath(self, which, dir):
-        self.current_obsnight = update_ntuple(self.current_obsnight, [which+'path',], [dir,])
         if which == 'raw':
+            self.current_obsnight = self.current_obsnight._replace(rawpath=dir)
             self.ids.rawpath.text = dir
         elif which == 'out':
+            self.current_obsnight = self.current_obsnight._replace(outpath=dir)
             self.ids.outpath.text = dir
         elif which == 'cal':
+            self.current_obsnight = self.current_obsnight._replace(calpath=dir)
             self.ids.calpath.text = dir
         
     def pick_outpath(self):
@@ -274,16 +276,41 @@ class ObservingScreen(IRScreen):
             popup = WarningDialog(text = "File format is not valid; must use '#' as placeholder only")
             popup.open()
             return
-        self.current_obsnight = update_ntuple(self.current_obsnight, ['filestub',], [stub,]) 
+        self.current_obsnight = self.current_obsnight._replace(filestub=stub) 
     
     def set_caltype(self, caltype):
         if caltype == 'Flats (lamps ON)':
-            flist = self.current_obsnight.flaton.flist if self.current_obsnight.flaton else ''
+            cout, flist = self.current_obsnight.flaton if self.current_obsnight.flaton else ('Not yet created', '')
         elif caltype == 'Flats (lamps OFF)':
-            flist = self.current_obsnight.flatoff.flist if self.current_obsnight.flatoff else ''
+            cout, flist = self.current_obsnight.flatoff if self.current_obsnight.flatoff else ('Not yet created', '')
         elif caltype == 'Arc Lamps':
-            flist = self.current_obsnight.cals.flist if self.current_obsnight.cals else ''
+            cout, flist = self.current_obsnight.cals if self.current_obsnight.cals else ('Not yet created', '')
         self.ids.calfiles.text = flist
+        self.ids.calout.text = cout
+    
+    def set_calfile(self, flist):
+        caltype = self.ids.caltypes.text
+        if caltype == 'Flats (lamps ON)':
+            tmp = self.current_obsnight.flaton
+            if tmp:
+                tmp[1] = flist
+            else:
+                tmp = ['',flist]
+            self.current_obsnight = self.current_obsnight._replace(flaton=tmp)
+        elif caltype == 'Flats (lamps OFF)':
+            tmp = self.current_obsnight.flatoff
+            if tmp:
+                tmp[1] = flist
+            else:
+                tmp = ['',flist]
+            self.current_obsnight = self.current_obsnight._replace(flatoff=tmp)
+        elif caltype == 'Arc Lamps':
+            tmp = self.current_obsnight.cals
+            if tmp:
+                tmp[1] = flist
+            else:
+                tmp = ['',flist]
+            self.current_obsnight = self.current_obsnight._replace(cals=tmp)
         
     def make_cals(self):
         if not self.current_obsnight.rawpath:
@@ -308,13 +335,16 @@ class ObservingScreen(IRScreen):
         raw = self.current_obsnight.rawpath
         cal = self.current_obsnight.calpath
         stub = self.current_obsnight.filestub
-        target = ird.image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
+        ird.image_stack(flist, path.join(raw, stub), output = path.join(cal, outp))
+        target[:] = [outp, flist]
+        self.ids.calfiles.text = flist
+        self.ids.calout.text = outp
         self.waiting.dismiss()
     
     def save_night(self):
         tmp = self.current_obsrun.nights
         tmp[self.current_obsnight.date] = self.current_obsnight
-        self.current_obsrun = update_ntuple(self.current_obsrun, ['nights',], [tmp,])
+        self.current_obsrun = self.current_obsrun._replace(nights=tmp)
         #tmp = ird.ObsNight(**self.current_obsnight._asdict())
         #self.current_obsrun.nights[tmp.date] = tmp
         #ird.add_to(self.current_obsrun, self.current_obsnight)
@@ -340,7 +370,7 @@ class ObservingScreen(IRScreen):
         self.current_target = ird.ObsTarget(night=self.current_obsnight, **targs)
         tmp = self.current_obsnight.targets
         tmp[self.current_target.targid] = self.current_target
-        self.current_obsnight = update_ntuple(self.current_obsnight, ['targets',], [tmp,])
+        self.current_obsnight = self.current_obsnight._replace(targets=tmp)
         #ird.add_to(self.current_obsnight, self.current_target)
         self.target_list = self.current_obsnight.targets.keys()
         self.ids.targs.text = self.current_target.targid
@@ -359,8 +389,8 @@ class ObservingScreen(IRScreen):
             self.ids.obsfiles.add_widget(tmp)
     
     def save_target(self):
-        self.current_target = update_ntuple(self.current_target, ['dither', 'notes'], \
-            [[x.dithertype for x in self.file_list], self.ids.tnotes.text])
+        self.current_target = self.current_target._replace(dither=[x.dithertype for x in self.file_list],
+            notes=self.ids.tnotes.text)
         #just make sure everything is propagating correctly
         self.current_obsnight.targets[self.current_target.targid] = self.current_target
         self.current_obsrun.nights[self.current_obsnight.date] = self.current_obsnight
@@ -396,15 +426,15 @@ class ExtractRegionScreen(IRScreen):
     
     def on_enter(self):
         flat = path.join(self.paths['cal'],'Flat.fits')
-        if self.theapp.current_night.flaton:
-            if self.theapp.current_night.flatoff:
+        if self.theapp.current_night.flaton and self.theapp.current_night.flaton[0]:
+            fon = FitsImage(self.theapp.current_night.flaton[0], load=True)
+            if self.theapp.current_night.flatoff and self.theapp.current_night.flatoff[0]:
+                foff = FitsImage(self.theapp.current_night.flatoff[0], load=True)
                 im_subtract(self.theapp.current_night.flaton, \
                     self.theapp.current_night.flatoff, outfile = flat)
             else:
-                write_fits(flat, self.theapp.current_night.flaton.header, \
-                    self.theapp.current_night.flaton.data_array)
-            self.current_flats = FitsImage(flat)
-            self.current_flats.load()
+                write_fits(flat, fon.header, fon.data_array)
+            self.current_flats = FitsImage(flat, load = True)
         self.pairstrings = ['{0} - {1}'.format(*[path.basename(x.fitsfile) for x in y]) for y in self.extract_pairs]
     
     def on_pre_leave(self):

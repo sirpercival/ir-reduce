@@ -98,10 +98,12 @@ class ScalableImage(object):
         self.scaled = bytescale(data).flatten().tolist()
 
 class FitsImage(ScalableImage):
-    def __init__(self, fitsfile, header = None):
+    def __init__(self, fitsfile, header = None, load = False):
         super(FitsImage, self).__init__()
         self.fitsfile = fitsfile
         self.header = grab_header(fitsfile) if not header else header
+        if load:
+            self.load()
     
     def load(self, **kwargs):
         hdu = fits.open(self.fitsfile)
