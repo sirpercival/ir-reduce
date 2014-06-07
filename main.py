@@ -113,7 +113,7 @@ class InstrumentScreen(IRScreen):
         #idb = shelve.open(instrumentdb)
         idb = instrumentdb
         self.saved_instrument_names = sorted(idb.keys())
-        self.saved_instruments = [ird.InstrumentProfile(**idb[s]) for s in self.saved_instrument_names]
+        self.saved_instruments = [ird.deserialize(idb[s]) for s in self.saved_instrument_names]
         #idb.close()
         self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
             for x in self.saved_instrument_names]
@@ -145,7 +145,7 @@ class InstrumentScreen(IRScreen):
         #idb = shelve.open(instrumentdb)
         #idb[new_instrument.instid] = new_instrument
         #idb.close()
-        instrumentdb[new_instrument.instid] = new_instrument._asdict()
+        instrumentdb[new_instrument.instid] = ird.serialize(new_instrument)
         self.on_pre_enter()
     
 class ObservingScreen(IRScreen):
@@ -173,7 +173,7 @@ class ObservingScreen(IRScreen):
         self.instrument_list = instrumentdb.keys()
         #odb = shelve.open(obsrundb)
         odb = obsrundb
-        self.obsids = {x:odb[x][x] for x in odb}
+        self.obsids = ird.deserialize(odb)
         self.obsrun_list = odb.keys()
         #odb.close()
         self.obsrun_buttons = [Button(text=x, size_hint_y = None, height = 30) \
@@ -198,14 +198,14 @@ class ObservingScreen(IRScreen):
                     break
             self.obsids[run_id] = run_db
             #odb = shelve.open(obsrundb)
-            obsrundb[run_id] = {run_id:run_db}
+            obsrundb[run_id] = {run_id:ird.serialize(run_db)}
             #odb.close()
         else:
             run_db = self.obsids[run_id]
         self.current_obsrun = ird.ObsRun(runid=run_id)
         self.rdb = JsonStore(run_db)
         #rdb = shelve.open(run_db)
-        tmp = dict([(str(self.rdb[r]['date']),ird.ObsNight(**self.rdb[r])) for r in self.rdb])
+        tmp = dict([(str(self.rdb[r]['date']),ird.deserialize(self.rdb[r])) for r in self.rdb])
         self.current_obsrun = self.current_obsrun._replace(nights=tmp)
         #for r in self.rdb:
         #    tmp = ird.ObsNight(**self.rdb[r])
@@ -239,7 +239,7 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict()
+            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
         #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
     
@@ -351,7 +351,7 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict()
+            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
         self.rdb.store_sync()
         #rdb.close()
         
@@ -367,7 +367,9 @@ class ObservingScreen(IRScreen):
             if popup.target_args else None)
     
     def update_targets(self, targs):
-        self.current_target = ird.ObsTarget(night=self.current_obsnight, **targs)
+        targs['images'], targs['dither'] = ird.parse_filestring(targs['filestring'], \
+            path.join(self.current_night.rawpath,self.current_obsnight.filestub))
+        self.current_target = ird.ObsTarget(**targs)
         tmp = self.current_obsnight.targets
         tmp[self.current_target.targid] = self.current_target
         self.current_obsnight = self.current_obsnight._replace(targets=tmp)
@@ -377,7 +379,7 @@ class ObservingScreen(IRScreen):
         self.set_filelist()
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
-        self.rdb[self.current_obsnight.date] = self.current_obsnight._asdict()
+        self.rdb[self.current_obsnight.date] = ird.serialize(self.current_obsnight)
         #rdb.close()
     
     def set_filelist(self):
@@ -397,7 +399,7 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.get_from(self.current_obsrun, night)._asdict
+            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
         #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
 
@@ -776,7 +778,7 @@ class WavecalScreen(IRScreen):
         niter = self.ids.numiter.text
         if self.linelist in self.linelists:
             #lldb = shelve.open('storage/linelists')
-            linelist_path = linelistdb[self.lineslist]
+            linelist_path = ird.deserialize(linelistdb[self.lineslist])
             #lldb.close()
         else:
             linelist_path = self.linelist

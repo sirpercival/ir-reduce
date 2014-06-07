@@ -5,7 +5,7 @@ from numpy import dtype, vstack
 from astropy.io import fits
 from os import path
 
-from collections import namedtuple, Mapping
+from collections import namedtuple, Mapping, OrderedDict
 
 def namedtuple_with_defaults(typename, field_names, default_values=[]):
     T = namedtuple(typename, field_names)
@@ -62,7 +62,7 @@ ObsNight = namedtuple_with_defaults('ObsNight', ['date','targets','filestub','ra
     'outpath','calpath','flaton','flatoff','cals'],['',{},'','','','',[],[],[]])
     
 ObsTarget = namedtuple_with_defaults('ObsTarget',['targid', 'instrument_id', 'filestring', \
-    'night', 'notes', 'images', 'dither', 'spectra'], ['','','',None,'',[],[],[]])
+    'notes', 'images', 'dither', 'spectra'], ['','','','',[],[],[]])
 
 def add_to(data, element):
     if isinstance(data, ObsRun):
@@ -87,6 +87,45 @@ def get_from(data, index):
     elif isinstance(data, ObsNight):
         return data.targets.get(index, None)
 
+def serialize(data):
+    if data is None or isinstance(data, (int, long, float, basestring)):
+        return data
+    if isinstance(data, list):
+        return {"py/list": [serialize(val) for val in data]}
+    if isinstance(data, (InstrumentProfile, ObsRun, ObsNight, ObsTarget)):
+        return {"py/collections.namedtuple": {
+            "type":   type(data).__name__,
+            "fields": list(data._fields),
+            "values": [serialize(getattr(data, f)) for f in data._fields]}}
+    if isinstance(data, tuple):
+        return {"py/tuple": [serialize(val) for val in data]}
+    if isinstance(data, dict):
+        return {"py/dict": [[serialize(k), serialize(v)] for k, v in data.iteritems()]}
+    if isinstance(data, FitsImage):
+        tmp = data.__dict__
+        tmp["data_array"] = None
+        return {"py/FitsImage": serialize(tmp)}
+    
+    raise TypeError("Type %s not data-serializable" % type(data))
+
+def deserialize(data):
+    if "py/dict" in data:
+        return {deserialize(key):deserialize(val) for key, val in data["py/dict"].iteritems()}
+    if "py/list" in data:
+        return [deserialize(val) for val in data["py/list"]]
+    if "py/tuple" in data:
+        return (deserialize(val) for val in data["py/tuple"])
+    if "py/collections.namedtuple" in data:
+        dct = data["py/collections.namedtuple"]
+        return namedtuple(dct["type"],dct["fields"])(*deserialize(dct["values"]))
+    if "py/FitsImage" in data:
+        f = FitsImage('')
+        f.__dict__.update(data["py/FitsImage"])
+        return f
+    return data
+        
+        
+    
 
 class ExtractedSpectrum(object):
     def __init__(self, specfile):
