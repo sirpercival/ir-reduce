@@ -28,11 +28,84 @@ from calib import calibrate_wavelength
 from kivy.storage.jsonstore import JsonStore
 import shelve, uuid, glob, copy, re
 from os import path
+from json import loads, dump
 from threading import Thread
+from collections import namedtuple
+from numpy import ndarray, array
 
-instrumentdb = JsonStore('storage/instrumentprofiles.json')
-obsrundb = JsonStore('storage/observingruns.json')
-linelistdb = JsonStore('storage/linelists.json')
+class IRStore(JsonStore):
+    def store_load(self):
+        if not path.exists(self.filename):
+            return
+        with open(self.filename) as fd:
+            data = fd.read()
+            if len(data) == 0:
+                return
+            self._data = loads(data, object_hook = self.deserialize)
+    
+    def store_sync(self):
+        if self._is_changed is False:
+            return
+        with open(self.filename, 'w') as fd:
+            dump(self.serialize(self._data), fd)
+        self._is_changed = False
+    
+    def isnamedtuple(self, obj):
+        """Heuristic check if an object is a namedtuple."""
+        return isinstance(obj, tuple) \
+           and hasattr(obj, "_fields") \
+           and hasattr(obj, "_asdict") \
+           and callable(obj._asdict)
+    
+    def serialize(self, data):
+        if data is None or isinstance(data, (bool, int, long, float, basestring)):
+            return data
+        if isinstance(data, list):
+            return [self.serialize(val) for val in data]
+        if self.isnamedtuple(data):
+            return {"py/collections.namedtuple": {
+                "type":   type(data).__name__,
+                "fields": list(data._fields),
+                "values": [self.serialize(getattr(data, f)) for f in data._fields]}}
+        if isinstance(data, dict):
+            if all(isinstance(k, basestring) for k in data):
+                return {k: self.serialize(v) for k, v in data.iteritems()}
+            return {"py/dict": [[self.serialize(k), self.serialize(v)] for k, v in data.iteritems()]}
+        if isinstance(data, tuple):
+            return {"py/tuple": [self.serialize(val) for val in data]}
+        if isinstance(data, set):
+            return {"py/set": [self.serialize(val) for val in data]}
+        if isinstance(data, ndarray):
+            return {"py/numpy.ndarray": {
+                "values": data.tolist(),
+                "dtype":  str(data.dtype)}}
+        if isinstance(data, FitsImage):
+            return {"py/FitsImage": [data.fitsfile, data.data_array.size > 0]}
+        raise TypeError("Type %s not data-serializable" % type(data))
+    
+    def deserialize(self, dct):
+        if "py/dict" in dct:
+            return dict(dct["py/dict"])
+        if "py/tuple" in dct:
+            return tuple(dct["py/tuple"])
+        if "py/set" in dct:
+            return set(dct["py/set"])
+        if "py/collections.namedtuple" in dct:
+            data = dct["py/collections.namedtuple"]
+            return namedtuple(data["type"], data["fields"])(*data["values"])
+        if "py/numpy.ndarray" in dct:
+            data = dct["py/numpy.ndarray"]
+            return array(data["values"], dtype=data["dtype"])
+        if "py/FitsImage" in dct:
+            d = dct["py/FitsImage"]
+            f = FitsImage(d[0], load=d[1])
+            return f
+        return dct
+
+
+instrumentdb = IRStore('storage/instrumentprofiles.json')
+obsrundb = IRStore('storage/observingruns.json')
+linelistdb = IRStore('storage/linelists.json')
 
 def get_tracedir(inst):
     return instrumentdb.get(inst).tracedir
@@ -113,7 +186,9 @@ class InstrumentScreen(IRScreen):
         #idb = shelve.open(instrumentdb)
         idb = instrumentdb
         self.saved_instrument_names = sorted(idb.keys())
-        self.saved_instruments = [ird.deserialize(idb[s]) for s in self.saved_instrument_names]
+        #self.saved_instruments = [ird.deserialize(idb[s]) for s in self.saved_instrument_names]
+        self.saved_instruments = [idb[s][s] for s in self.saved_instrument_names]
+        print [idb[s] for s in idb]
         #idb.close()
         self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
             for x in self.saved_instrument_names]
@@ -145,7 +220,8 @@ class InstrumentScreen(IRScreen):
         #idb = shelve.open(instrumentdb)
         #idb[new_instrument.instid] = new_instrument
         #idb.close()
-        instrumentdb[new_instrument.instid] = ird.serialize(new_instrument)
+        #instrumentdb[new_instrument.instid] = ird.serialize(new_instrument)
+        instrumentdb[new_instrument.instid] = {new_instrument.instid:new_instrument}
         self.on_pre_enter()
     
 class ObservingScreen(IRScreen):
@@ -173,7 +249,8 @@ class ObservingScreen(IRScreen):
         self.instrument_list = instrumentdb.keys()
         #odb = shelve.open(obsrundb)
         odb = obsrundb
-        self.obsids = ird.deserialize(odb)
+        #self.obsids = {x:ird.deserialize(odb[x])[x] for x in odb}
+        self.obsids = {x:odb[x] for x in odb}
         self.obsrun_list = odb.keys()
         #odb.close()
         self.obsrun_buttons = [Button(text=x, size_hint_y = None, height = 30) \
@@ -198,14 +275,21 @@ class ObservingScreen(IRScreen):
                     break
             self.obsids[run_id] = run_db
             #odb = shelve.open(obsrundb)
-            obsrundb[run_id] = {run_id:ird.serialize(run_db)}
+            obsrundb[run_id] = {run_id:run_db}
             #odb.close()
         else:
-            run_db = self.obsids[run_id]
+            run_db = self.obsids[run_id][run_id]
         self.current_obsrun = ird.ObsRun(runid=run_id)
-        self.rdb = JsonStore(run_db)
+        print run_db
+        self.rdb = IRStore(run_db)
         #rdb = shelve.open(run_db)
-        tmp = dict([(str(self.rdb[r]['date']),ird.deserialize(self.rdb[r])) for r in self.rdb])
+        tmp = []
+        for r in self.rdb:
+            #ds = ird.deserialize(self.rdb[r])
+            #tmp.append((str(ds.date), ds))
+            tmp.append((str(self.rdb[r][r].date), self.rdb[r][r]))
+        tmp = dict(tmp)
+        #tmp = dict([(str(ird.deserialize(self.rdb[r])['date']),ird.deserialize(self.rdb[r])) for r in self.rdb])
         self.current_obsrun = self.current_obsrun._replace(nights=tmp)
         #for r in self.rdb:
         #    tmp = ird.ObsNight(**self.rdb[r])
@@ -239,7 +323,8 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            #self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            self.rdb[night] = {night:ird.get_from(self.current_obsrun, night)}
         #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
     
@@ -280,6 +365,7 @@ class ObservingScreen(IRScreen):
     
     def set_caltype(self, caltype):
         if caltype == 'Flats (lamps ON)':
+            print self.current_obsnight.flaton
             cout, flist = self.current_obsnight.flaton if self.current_obsnight.flaton else ('Not yet created', '')
         elif caltype == 'Flats (lamps OFF)':
             cout, flist = self.current_obsnight.flatoff if self.current_obsnight.flatoff else ('Not yet created', '')
@@ -291,25 +377,44 @@ class ObservingScreen(IRScreen):
     def set_calfile(self, flist):
         caltype = self.ids.caltypes.text
         if caltype == 'Flats (lamps ON)':
+            flatfile = path.join(self.current_obsnight.calpath,self.current_obsnight.date+'-FlatON.fits')
             tmp = self.current_obsnight.flaton
             if tmp:
                 tmp[1] = flist
             else:
                 tmp = ['',flist]
+            try:
+                if FitsImage(flatfile).header['FILES'] == flist:
+                    tmp[0] = flatfile
+                    self.ids.calout.txt = flatfile
+            except:
+                pass
             self.current_obsnight = self.current_obsnight._replace(flaton=tmp)
         elif caltype == 'Flats (lamps OFF)':
+            flatfile = path.join(self.current_obsnight.calpath,self.current_obsnight.date+'-FlatOFF.fits')
             tmp = self.current_obsnight.flatoff
             if tmp:
                 tmp[1] = flist
             else:
                 tmp = ['',flist]
+            try:
+                if FitsImage(flatfile).header['FILES'] == flist:
+                    tmp[0] = flatfile
+            except:
+                pass
             self.current_obsnight = self.current_obsnight._replace(flatoff=tmp)
         elif caltype == 'Arc Lamps':
+            flatfile = path.join(self.current_obsnight.calpath,self.current_obsnight.date+'-Wavecal.fits')
             tmp = self.current_obsnight.cals
             if tmp:
                 tmp[1] = flist
             else:
                 tmp = ['',flist]
+            try:
+                if FitsImage(flatfile).header['FILES'] == flist:
+                    tmp[0] = flatfile
+            except:
+                pass
             self.current_obsnight = self.current_obsnight._replace(cals=tmp)
         
     def make_cals(self):
@@ -351,7 +456,8 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            #self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            self.rdb[night] = {night:ird.get_from(self.current_obsrun, night)}
         self.rdb.store_sync()
         #rdb.close()
         
@@ -368,7 +474,7 @@ class ObservingScreen(IRScreen):
     
     def update_targets(self, targs):
         targs['images'], targs['dither'] = ird.parse_filestring(targs['filestring'], \
-            path.join(self.current_night.rawpath,self.current_obsnight.filestub))
+            path.join(self.current_obsnight.rawpath,self.current_obsnight.filestub))
         self.current_target = ird.ObsTarget(**targs)
         tmp = self.current_obsnight.targets
         tmp[self.current_target.targid] = self.current_target
@@ -379,7 +485,8 @@ class ObservingScreen(IRScreen):
         self.set_filelist()
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
-        self.rdb[self.current_obsnight.date] = ird.serialize(self.current_obsnight)
+        #self.rdb[self.current_obsnight.date] = ird.serialize(self.current_obsnight)
+        self.rdb[self.current_obsnight.date] = {self.current_obsnight.date:self.current_obsnight}
         #rdb.close()
     
     def set_filelist(self):
@@ -399,7 +506,8 @@ class ObservingScreen(IRScreen):
         #rdb = shelve.open(self.obsids[self.current_obsrun.runid])
         #rdb = JsonStore(self.obsids[self.current_obsrun.runid])
         for night in self.obsnight_list:
-            self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            #self.rdb[night] = ird.serialize(ird.get_from(self.current_obsrun, night))
+            self.rdb[night] = ird.get_from(self.current_obsrun, night)
         #rdb.close()
         self.target_list = self.current_obsnight.targets.keys()
 
@@ -429,9 +537,11 @@ class ExtractRegionScreen(IRScreen):
     def on_enter(self):
         flat = path.join(self.paths['cal'],'Flat.fits')
         if self.theapp.current_night.flaton and self.theapp.current_night.flaton[0]:
-            fon = FitsImage(self.theapp.current_night.flaton[0], load=True)
+            fon = FitsImage(path.join(self.paths['cal'], \
+                self.theapp.current_night.flaton[0]), load=True)
             if self.theapp.current_night.flatoff and self.theapp.current_night.flatoff[0]:
-                foff = FitsImage(self.theapp.current_night.flatoff[0], load=True)
+                foff = FitsImage(path.join(self.paths['cal'], \
+                    self.theapp.current_night.flatoff[0]), load=True)
                 im_subtract(self.theapp.current_night.flaton, \
                     self.theapp.current_night.flatoff, outfile = flat)
             else:
@@ -778,7 +888,8 @@ class WavecalScreen(IRScreen):
         niter = self.ids.numiter.text
         if self.linelist in self.linelists:
             #lldb = shelve.open('storage/linelists')
-            linelist_path = ird.deserialize(linelistdb[self.lineslist])
+            #linelist_path = ird.deserialize(linelistdb[self.lineslist])
+            linelist_path = linelistdb[self.linelist]
             #lldb.close()
         else:
             linelist_path = self.linelist

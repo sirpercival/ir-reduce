@@ -1,1 +1,1 @@
-{"SIMON CTIO": {"tracedir": "horizontal", "instid": "SIMON CTIO", "headerkeys": {"type": "IMAGETYP", "exp": "EXPTIME", "air": "AIRMASS"}, "description": "SIMON on the CTIO 1.5m SMARTS telescope", "dimensions": [1024, 1024]}}
+{"SIMON CTIO": {"SIMON CTIO": {"py/collections.namedtuple": {"values": ["SIMON CTIO", "horizontal", {"py/tuple": [1024, 1024]}, {"type": "IMAGETYP", "exp": "EXPTIME", "air": "AIRMASS"}, "SIMON on the CTIO 1.5m SMARTS telescope"], "fields": ["instid", "tracedir", "dimensions", "headerkeys", "description"], "type": "InstrumentProfile"}}}}

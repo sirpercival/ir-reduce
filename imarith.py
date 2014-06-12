@@ -6,6 +6,7 @@ from scipy.interpolate import interp1d
 from scipy.signal import medfilt
 from colorsys import hsv_to_rgb
 from random import random
+import pdb
 
 def grab_image_stack(imlist):
     images = []
@@ -102,9 +103,11 @@ def pair_dithers(ditherlist):
 def write_fits(outputfile, header, data):
     if not outputfile:
         return
-    outfits = fits.PrimaryHDU(data)
-    outfits.header = header
-    outfits.writeto(outputfile, output_verify='ignore', clobber=True)
+    #pdb.set_trace()
+    
+    outfits = fits.PrimaryHDU(data=data, header=header)
+    #outfits.verify('fix')
+    outfits.writeto(outputfile, output_verify='fix', clobber=True)
     
 def gen_colors(n):
     '''generate a list of dissimilar colors'''

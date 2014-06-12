@@ -39,7 +39,6 @@ def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
 
 def grab_header(file):
     hdul = fits.open(file)
-    print hdul.verify('silentfix')
     header = hdul[0].header
     hdul.close()
     return header
@@ -107,6 +106,7 @@ class FitsImage(ScalableImage):
     
     def load(self, **kwargs):
         hdu = fits.open(self.fitsfile)
+        print hdu[0].data.shape
         super(FitsImage, self).load(hdu[0].data, **kwargs)
         hdu.close()
     
