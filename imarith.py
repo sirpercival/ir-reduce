@@ -105,8 +105,8 @@ def write_fits(outputfile, header, data):
         return
     #pdb.set_trace()
     
-    outfits = fits.PrimaryHDU(data=data, header=header)
-    #outfits.verify('fix')
+    outfits = fits.HDUList([fits.PrimaryHDU(data=data, header=header)])
+    outfits.verify('fix')
     outfits.writeto(outputfile, output_verify='fix', clobber=True)
     
 def gen_colors(n):
