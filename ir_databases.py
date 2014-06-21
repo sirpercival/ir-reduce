@@ -51,7 +51,7 @@ def image_stack(flist, stub, output = 'imstack.fits'):
     tmp = FitsImage(output)
     tmp.flist = flist
     tmp.header['FILES'] = flist
-    tmp.update_fits()
+    tmp.update_fits(header_only = True)
     return tmp
 
 InstrumentProfile = namedtuple_with_defaults('InstrumentProfile',['instid', 'tracedir', \

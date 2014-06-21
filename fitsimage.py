@@ -106,11 +106,16 @@ class FitsImage(ScalableImage):
     
     def load(self, **kwargs):
         hdu = fits.open(self.fitsfile)
-        print hdu[0].data.shape
         super(FitsImage, self).load(hdu[0].data, **kwargs)
         hdu.close()
     
-    def update_fits(self):
+    def update_fits(self, header_only = False):
+        if header_only:
+            hdu = fits.open(self.fitsfile, mode='update')
+            hdu[0].header = self.header
+            hdu.flush()
+            hdu.close()
+            return
         fits.update(self.fitsfile, self.data_array, self.header)
     
     def get_header_keyword(self, *args):

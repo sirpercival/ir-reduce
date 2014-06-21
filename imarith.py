@@ -25,7 +25,7 @@ def im_add(im1, im2, outputfile = None):
     write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
 
-def im_divide(im1, im2, outputfile = None):
+def im_divide(im1, im2, outputfile = None, return_fits = False):
     if im1.header:
         finalheader = im1.header
     outputimg = im1.data_array / im2.data_array
@@ -43,6 +43,7 @@ def minmax(data):
     return float(nanmin(data)), float(nanmax(data))
 
 def im_subtract(im1, im2, outputfile = None):
+    dir(im1)
     if im1.header:
         finalheader = im1.header
         
@@ -50,7 +51,7 @@ def im_subtract(im1, im2, outputfile = None):
     write_fits(outputfile, finalheader, outputimg)
     return finalheader, outputimg
 
-def medcombine(fitslist, outputfile = None):
+def medcombine(fitslist, outputfile = None, normalize = False):
     headers, images = grab_image_stack(fitslist)
     finalheader = headers[0]
     scale_ref = images[0]
@@ -100,12 +101,12 @@ def pair_dithers(ditherlist):
     bb = [b[i] for i in (arange(na)*na/nb).astype('int')] if nb > na else b
     return zip(aa, bb)
     
-def write_fits(outputfile, header, data):
+def write_fits(outputfile, head, dat):
     if not outputfile:
         return
     #pdb.set_trace()
     
-    outfits = fits.HDUList([fits.PrimaryHDU(data=data, header=header)])
+    outfits = fits.HDUList([fits.PrimaryHDU(data=dat, header=head)])
     outfits.verify('fix')
     outfits.writeto(outputfile, output_verify='fix', clobber=True)
     

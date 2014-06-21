@@ -20,8 +20,10 @@ from imagepane import ImagePane, default_image
 from fitsimage import FitsImage
 from comboedit import ComboEdit
 import ir_databases as ird
-from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, DefineTrace, WaitingDialog
-from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, scale_spec, combine_spectra
+from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, WarningDialog, \
+    DefineTrace, WaitingDialog
+from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, \
+    scale_spec, combine_spectra, im_divide
 from robuststats import robust_mean as robm, interp_x, idlhash, med_normal
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
@@ -31,7 +33,7 @@ from os import path
 from json import loads, dump
 from threading import Thread
 from collections import namedtuple
-from numpy import ndarray, array
+from numpy import ndarray, array, median, fmin
 
 class IRStore(JsonStore):
     def store_load(self):
@@ -101,6 +103,24 @@ class IRStore(JsonStore):
             f = FitsImage(d[0], load=d[1])
             return f
         return dct
+        
+def make_region(im1, im2, region, flat = None, telluric = False):
+    #print im1.data_array.shape
+    if not im1.data_array.any():
+        im1.load()
+    if not im2.data_array.any():
+        im2.load()
+    print region
+    reg1 = im1.data_array[region[0]:region[2]+1, region[1]:region[3]+1]
+    reg2 = im2.data_array[region[0]:region[2]+1, region[1]:region[3]+1]
+    if flat:
+        freg = flat.data_array[region[0]:region[2]+1, region[1]:region[3]+1]
+        freg /= median(freg)
+        reg1 /= freg
+        reg2 /= freg
+    if telluric:
+        return med_normal(fmin(reg1, reg2))
+    return med_normal(reg1 - reg2)
 
 
 instrumentdb = IRStore('storage/instrumentprofiles.json')
@@ -108,7 +128,7 @@ obsrundb = IRStore('storage/observingruns.json')
 linelistdb = IRStore('storage/linelists.json')
 
 def get_tracedir(inst):
-    return instrumentdb.get(inst).tracedir
+    return instrumentdb.get(inst)[inst].tracedir
     #idb = shelve.open(instrumentdb)
     #out = idb[inst].tracedir
     #idb.close()
@@ -188,7 +208,6 @@ class InstrumentScreen(IRScreen):
         self.saved_instrument_names = sorted(idb.keys())
         #self.saved_instruments = [ird.deserialize(idb[s]) for s in self.saved_instrument_names]
         self.saved_instruments = [idb[s][s] for s in self.saved_instrument_names]
-        print [idb[s] for s in idb]
         #idb.close()
         self.instrument_list = [Button(text = x, size_hint_y = None, height = '30dp') \
             for x in self.saved_instrument_names]
@@ -280,7 +299,6 @@ class ObservingScreen(IRScreen):
         else:
             run_db = self.obsids[run_id][run_id]
         self.current_obsrun = ird.ObsRun(runid=run_id)
-        print run_db
         self.rdb = IRStore(run_db)
         #rdb = shelve.open(run_db)
         tmp = []
@@ -365,7 +383,6 @@ class ObservingScreen(IRScreen):
     
     def set_caltype(self, caltype):
         if caltype == 'Flats (lamps ON)':
-            print self.current_obsnight.flaton
             cout, flist = self.current_obsnight.flaton if self.current_obsnight.flaton else ('Not yet created', '')
         elif caltype == 'Flats (lamps OFF)':
             cout, flist = self.current_obsnight.flatoff if self.current_obsnight.flatoff else ('Not yet created', '')
@@ -542,8 +559,7 @@ class ExtractRegionScreen(IRScreen):
             if self.theapp.current_night.flatoff and self.theapp.current_night.flatoff[0]:
                 foff = FitsImage(path.join(self.paths['cal'], \
                     self.theapp.current_night.flatoff[0]), load=True)
-                im_subtract(self.theapp.current_night.flaton, \
-                    self.theapp.current_night.flatoff, outfile = flat)
+                im_subtract(fon, foff, outputfile = flat)
             else:
                 write_fits(flat, fon.header, fon.data_array)
             self.current_flats = FitsImage(flat, load = True)
@@ -559,22 +575,24 @@ class ExtractRegionScreen(IRScreen):
             popup.open()
             return
         pair_index = self.pairstrings.index(val)
-        fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
+        fitsfile = self.paths['out']+re.sub(' ','',re.sub('.fits','',val))+'.fits'
         if not path.isfile(fitsfile):
             im1, im2 = [x for x in copy.deepcopy(self.extract_pairs[pair_index])]
             im1.load(); im2.load()
-            if self.current_flats:
-                im1 = im_divide(im1, self.current_flats)
-                im2 = im_divide(im2, self.current_flats)
+            #if self.current_flats:
+            #    tmp = im_divide(im1, self.current_flats)
+            #    im1.header, im1.data_array = tmp
+            #    tmp = im_divide(im2, self.current_flats)
+            #    im2.header, im2.data_array = tmp
             im_subtract(im1, im2, outputfile=path.join(self.paths['out'],fitsfile))
-        self.current_impair = FitsImage(path.join(self.paths['out'],fitsfile))
-        self.current_impair.load()
+        self.current_impair = FitsImage(path.join(self.paths['out'],fitsfile), load=True)
         self.ids.ipane.load_data(self.current_impair)
         self.imwid, self.imht = self.current_impair.dimensions
         if self.current_impair.get_header_keyword('EXREGX1'):
             for x in ['x1', 'y1', 'x2', 'y2']:
                 tmp = self.current_impair.get_header_keyword('EXREG'+x.upper())
-                self.set_coord(x, tmp[0])
+                if tmp[0] is not None:
+                    self.set_coord(x, tmp[0])
     
     def get_coords(self):
         xscale = float(self.imcanvas.width) / float(self.imwid)
@@ -625,15 +643,15 @@ class TracefitScreen(IRScreen):
     
     def on_enter(self):
         self.pairstrings = ['{0} - {1}'.format(*[path.basename(x.fitsfile) for x in y]) \
-            for y in theapp.extract_pairs]
+            for y in self.theapp.extract_pairs]
             
     def set_imagepair(self, val):
-        if not theapp.current_target:
+        if not self.theapp.current_target:
             popup = WarningDialog(text='You need to select a target (on the Observing Screen) before proceeding!')
             popup.open()
             return
         self.pair_index = self.pairstrings.index(val)
-        fitsfile = self.paths['out']+re.sub(' ','',val)+'.fits'
+        fitsfile = self.paths['out']+re.sub(' ','',re.sub('.fits','',val))+'.fits'
         if not path.isfile(fitsfile):
             popup = WarningDialog(text='You have to select an extraction'\
                 'region for this image pair \nbefore you can move on to this step.')
@@ -651,9 +669,10 @@ class TracefitScreen(IRScreen):
         self.itexture.blit_buffer(idata, colorfmt='luminance', bufferfmt='ubyte', \
             size = self.current_impair.dimensions)
         self.trace_axis = 0 if get_tracedir(self.current_target.instrument_id) == 'vertical' else 1
-        reg = self.region
-        tmp = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
-        self.extractregion = med_normal(tmp)
+        #tmp = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        #self.extractregion = med_normal(tmp)
+        tmp = self.theapp.extract_pairs[self.pair_index]
+        self.extractregion = make_region(tmp[0], tmp[1], self.region, self.current_flats)
         if not self.trace_axis:
             self.extractregion = self.extractregion.transpose()
             self.trace_axis = 1
@@ -754,9 +773,9 @@ class TracefitScreen(IRScreen):
         
         im1, im2 = [x for x in copy.deepcopy(theapp.extract_pairs[self.pair_index])]
         im1.load(); im2.load()
-        if self.current_flats:
-            im1 = im_divide(im1, self.current_flats)
-            im2 = im_divide(im2, self.current_flats)
+        #if self.current_flats:
+        #    im1 = im_divide(im1, self.current_flats)
+        #    im2 = im_divide(im2, self.current_flats)
         im1.data_array = undistort_imagearray(im1.data_array, pdistort)
         im2.data_array = undistort_imagearray(im2.data_array, ndistort)
         im_subtract(im1, im2, outputfile=self.current_impair.fitsfile)
@@ -766,7 +785,7 @@ class TracefitScreen(IRScreen):
         self.current_impair.header['EXREGY1'] = (tmp.get_header_keyword('EXREGY1'), 'extraction region coordinate Y1')
         self.current_impair.header['EXREGX2'] = (tmp.get_header_keyword('EXREGX2'), 'extraction region coordinate X2')
         self.current_impair.header['EXREGY2'] = (tmp.get_header_keyword('EXREGY2'), 'extraction region coordinate Y2')
-        self.current_impair.update_fits()
+        self.current_impair.update_fits(header_only = True)
         self.set_imagepair(self.pairstrings[self.pair_index])
         self.fit_params['nmodel'] = None
         self.fit_params['pmodel'] = None
@@ -790,13 +809,14 @@ class TracefitScreen(IRScreen):
             self.lamp = self.lamp[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         im1, im2 = [x for x in copy.deepcopy(the_app.extract_pairs[self.pair_index])]
         im1.load(); im2.load()
-        if self.current_flats:
-            im1 = im_divide(im1, self.current_flats)
-            im2 = im_divide(im2, self.current_flats)
+        #if self.current_flats:
+        #    im1 = im_divide(im1, self.current_flats)
+        #    im2 = im_divide(im2, self.current_flats)
         im1.data_array = undistort_imagearray(im1.data_array, pdistort)
         im2.data_array = undistort_imagearray(im2.data_array, ndistort)
-        tmp, self.tell = im_minimum(im1.data_array, im2.data_array)
-        self.tell = self.tell[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
+        self.tell = make_region(im1, im2, self.region, flat=self.current_flats, telluric=True)
+        #tmp, self.tell = im_minimum(im1.data_array, im2.data_array)
+        #self.tell = self.tell[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         self.pextract = extract(self.fit_params['pmodel'], self.extractregion, self.tell, 'pos', lamp = self.lamp)
         self.nextract = extract(self.fit_params['nmodel'], self.extractregion, self.tell, 'neg', lamp = self.lamp)
         
