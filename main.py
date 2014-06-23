@@ -24,7 +24,7 @@ from dialogs import FitsHeaderDialog, DirChooser, AddTarget, SetFitParams, Warni
     DefineTrace, WaitingDialog
 from imarith import pair_dithers, im_subtract, im_minimum, minmax, write_fits, gen_colors, \
     scale_spec, combine_spectra, im_divide
-from robuststats import robust_mean as robm, interp_x, idlhash, med_normal
+from robuststats import robust_mean as robm, interp_x, idlhash, med_normal, interp_nan
 from findtrace import find_peaks, fit_multipeak, draw_trace, undistort_imagearray, extract
 from calib import calibrate_wavelength
 from kivy.storage.jsonstore import JsonStore
@@ -110,7 +110,6 @@ def make_region(im1, im2, region, flat = None, telluric = False):
         im1.load()
     if not im2.data_array.any():
         im2.load()
-    print region
     reg1 = im1.data_array[region[0]:region[2]+1, region[1]:region[3]+1]
     reg2 = im2.data_array[region[0]:region[2]+1, region[1]:region[3]+1]
     if flat:
@@ -672,11 +671,12 @@ class TracefitScreen(IRScreen):
         #tmp = self.current_impair.data_array[self.region[1]:self.region[3]+1,self.region[0]:self.region[2]+1]
         #self.extractregion = med_normal(tmp)
         tmp = self.theapp.extract_pairs[self.pair_index]
-        self.extractregion = make_region(tmp[0], tmp[1], self.region, self.current_flats)
-        if not self.trace_axis:
-            self.extractregion = self.extractregion.transpose()
-            self.trace_axis = 1
-            self.region = [self.region[x] for x in [1, 0, 3, 2]]
+        if self.trace_axis:
+            #self.trace_axis = 1
+            reg = [self.region[x] for x in [1, 0, 3, 2]]
+            self.extractregion = make_region(tmp[0], tmp[1], reg, self.current_flats)#.transpose()
+        else:
+            self.extractregion = make_region(tmp[0], tmp[1], self.region, self.current_flats).transpose()
         reg = self.region[:]
         reg[2] = reg[2] - reg[0]
         reg[3] = reg[3] - reg[1]
@@ -686,7 +686,8 @@ class TracefitScreen(IRScreen):
         dims[1][self.trace_axis] = 0.6 * self.extractregion.shape[self.trace_axis]
         self.tracepoints = robm(self.extractregion[dims[0][0]:dims[1][0]+1,\
             dims[0][1]:dims[1][1]+1], axis = self.trace_axis)
-        self.tplot.points = zip(range(len(self.tracepoints)), self.tracepoints)
+        self.tplot.points = interp_nan(list(enumerate(self.tracepoints)))
+        pxs, self.tracepoints = zip(*self.tplot.points)
         self.drange = minmax(self.tracepoints)
         self.ids.the_graph.add_plot(self.tplot)
     

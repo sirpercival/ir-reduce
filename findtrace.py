@@ -48,6 +48,7 @@ def multi_peak_model(mtype, npeak):
         amplitudes, means, sigmas = get_individual_params(*params)
         for i,a in enumerate(amplitudes):
             model = mt(a, means[i], sigmas[i])
+            print x.shape, y.shape, model(x).shape
             y += model(x)
         return y
     return the_model_func
