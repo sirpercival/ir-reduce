@@ -636,7 +636,7 @@ class TracefitScreen(IRScreen):
     tracepoints = ListProperty([])
     trace_axis = NumericProperty(0)
     fit_params = DictProperty({})
-    trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,0]),MeshLinePlot(color=[0,1,1,0])])
+    trace_lines = ListProperty([MeshLinePlot(color=[0,0,1,1]),MeshLinePlot(color=[0,1,1,1])])
     current_flats = ObjectProperty(None)
     theapp = ObjectProperty(None)
     
@@ -748,18 +748,18 @@ class TracefitScreen(IRScreen):
             'neg':[x.slider.value for x in self.apertures['neg']]}
         for x in self.trace_lines:
             if x in self.ids.the_graph.plots:
-                self.the_graph.remove_plot(x)
+                self.ids.the_graph.remove_plot(x)
         if self.fit_params.get('man',False):
             popup = DefineTrace(npos=len(self.apertures['pos']), \
                 nneg=len(self.apertures['neg']), imtexture = self.iregion)
             popup.bind(on_dismiss = self.manual_trace(popup.tracepoints))
             popup.open()
             return
-        self.xx, self.fitparams['pmodel'], self.fitparams['nmodel'] = \
+        self.xx, self.fit_params['pmodel'], self.fit_params['nmodel'] = \
             fit_multipeak(self.tracepoints, pos = pos, wid = self.fit_params['wid'], \
             ptype = self.fit_params['shape'])
-        self.trace_lines[0].points = zip(self.xx, self.fitparams['pmodel'](self.xx))
-        self.trace_lines[1].points = zip(self.xx, self.fitparams['nmodel'](self.yy))
+        self.trace_lines[0].points = zip(self.xx, self.fit_params['pmodel'](self.xx))
+        self.trace_lines[1].points = zip(self.xx, self.fit_params['nmodel'](self.xx))
         self.ids.the_graph.add_plot(self.trace_lines[0])
         self.ids.the_graph.add_plot(self.trace_lines[1])
         
@@ -769,8 +769,8 @@ class TracefitScreen(IRScreen):
             popup = WarningDialog(text='Make sure you fit the trace centers first!')
             popup.open()
             return
-        pdistort, ndistort = draw_trace(self.extractregion, self.xx, self.fitparams['pmodel'], \
-            self.fitparams['nmodel'], fixdistort = True, fitdegree = self.fitparams['deg'])
+        pdistort, ndistort = draw_trace(self.extractregion, self.xx, self.fit_params['pmodel'], \
+            self.fit_params['nmodel'], fixdistort = True, fitdegree = self.fit_params['deg'])
         
         im1, im2 = [x for x in copy.deepcopy(theapp.extract_pairs[self.pair_index])]
         im1.load(); im2.load()

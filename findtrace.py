@@ -37,18 +37,21 @@ def get_individual_params(*params):
     amplitudes = params[::3]
     means = params[1::3]
     sigmas = params[2::3]
+    print params#, amplitudes, means, sigmas
+    #amplitudes = [p[0] for p in params]
+    #means = [p[1] for p in params]
+    #sigmas = [p[2] for p in params]
     assert len(amplitudes) == len(means) == len(sigmas), 'Parameter lists must be the same length.'
     return amplitudes, means, sigmas
 
 def multi_peak_model(mtype, npeak):
     mt = {'Gaussian':fm.Gaussian1D, 'Lorentzian':fm.Lorentz1D}[mtype]
-    params = list(chain.from_iterable([(1., 0., 1.) for i in xrange(npeak)]))
+    params = [np.array([1., 0., 1.]) for i in xrange(npeak)]
     def the_model_func(x, *params):
         y = np.zeros_like(x)
         amplitudes, means, sigmas = get_individual_params(*params)
         for i,a in enumerate(amplitudes):
             model = mt(a, means[i], sigmas[i])
-            print x.shape, y.shape, model(x).shape
             y += model(x)
         return y
     return the_model_func
@@ -93,14 +96,13 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     #split into positive and negative so that we can differentiate between
     #the two original images
     pmodel = multi_peak_model(ptype, len(amps[0]))
-    pinit = list(chain.from_iterable(zip(amps[0], pos['pos'], \
-        [wid for x in xrange(len(amps[0]))])))
+    pinit = [np.array([a, pos['pos'][i], wid]) for i, a in enumerate(amps[0])]
+    print pinit
     pdata = np.clip(idata, a_min=med, a_max=np.nanmax(idata))
     p_fit, p_tmp = curve_fit(pmodel, x_data, pdata, pinit)
     
     nmodel = multi_peak_model(ptype, len(amps[1]))
-    ninit = list(chain.from_iterable(zip(amps[1], pos['neg'], \
-        [wid for x in xrange(len(amps[0]))])))
+    ninit = [np.array([a, pos['neg'][i], wid]) for i, a in enumerate(amps[1])]
     ndata = np.clip(idata, a_max=med, a_min=np.nanmin(idata))
     n_fit, n_tmp = curve_fit(nmodel, x_data, ndata, ninit)
     
@@ -111,9 +113,10 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     midpoint = ns/2
     tc1, tc2 = midpoint, midpoint + 1
     fitp = deconstruct_composite(pfit)
+    print fitp, pfit
     fitn = deconstruct_composite(nfit)
-    p_amp, p_mean, p_sig = get_individual_params(fitp)
-    n_amp, n_mean, n_sig = get_individual_params(fitn)
+    p_amp, p_mean, p_sig = get_individual_params(*fitp)
+    n_amp, n_mean, n_sig = get_individual_params(*fitn)
     np = len(p_mean)
     nn = len(n_mean)
     
@@ -142,6 +145,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             lb = max(tc1 - 20, 0)
             ub = min(tc1 + 20, ns-1)
             piece = robm(idata[:,(lb,ub)], axis=1)
+            junk, piece = zip(*interp_nan(list(enumerate(piece))))
             med = np.median(piece)
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)

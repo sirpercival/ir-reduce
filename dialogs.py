@@ -231,7 +231,7 @@ class SetFitParams(Popup):
     
     def set_fit(self):
         self.fit_args = {'shape':self.ids.fit_psf.text, \
-            'wid':self.ids.fit_wid.text, 'deg':self.ids.fit_deg.text,\
+            'wid':float(self.ids.fit_wid.text), 'deg':int(self.ids.fit_deg.text),\
             'man':(self.ids.manfit.text == 'Yes')}
         self.dismiss()
     
