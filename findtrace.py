@@ -34,10 +34,11 @@ def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     return maxima[priority[:npeak]]
 
 def get_individual_params(*params):
-    amplitudes = params[::3]
-    means = params[1::3]
-    sigmas = params[2::3]
-    print params#, amplitudes, means, sigmas
+    p = np.asarray(params).flatten()
+    amplitudes = p[::3]
+    means = p[1::3]
+    sigmas = p[2::3]
+    #print p
     #amplitudes = [p[0] for p in params]
     #means = [p[1] for p in params]
     #sigmas = [p[2] for p in params]
@@ -97,7 +98,6 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     #the two original images
     pmodel = multi_peak_model(ptype, len(amps[0]))
     pinit = [np.array([a, pos['pos'][i], wid]) for i, a in enumerate(amps[0])]
-    print pinit
     pdata = np.clip(idata, a_min=med, a_max=np.nanmax(idata))
     p_fit, p_tmp = curve_fit(pmodel, x_data, pdata, pinit)
     
@@ -113,12 +113,11 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     midpoint = ns/2
     tc1, tc2 = midpoint, midpoint + 1
     fitp = deconstruct_composite(pfit)
-    print fitp, pfit
     fitn = deconstruct_composite(nfit)
     p_amp, p_mean, p_sig = get_individual_params(*fitp)
     n_amp, n_mean, n_sig = get_individual_params(*fitn)
-    np = len(p_mean)
-    nn = len(n_mean)
+    n_p = len(p_mean)
+    n_n = len(n_mean)
     
     #back-convert the custom model into a composite model
     #fitp = build_composite(pfit, ptype)
@@ -133,11 +132,11 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     apertures = {'pos':[range(ns) for _ in p_mean], \
         'neg':[range(ns) for _ in n_mean]}
 
-    #pcur1, ncur1 = deepcopy(fitp), deepcopy(fitn)
-    #pcur2, ncur2 = deepcopy(fitp), deepcopy(fitn)
-    pmodel, nmodel = multi_peak_model(ptype, np), multi_peak_model(ptype, nn)
-    pcur1, ncur1 = deepcopy(pfit), deepcopy(nfit)
-    pcur2, ncur2 = deepcopy(pfit), deepcopy(nfit)
+    pcur1, ncur1 = deepcopy(fitp), deepcopy(fitn)
+    pcur2, ncur2 = deepcopy(fitp), deepcopy(fitn)
+    pmodel, nmodel = multi_peak_model(ptype, n_p), multi_peak_model(ptype, n_n)
+    #pcur1, ncur1 = deepcopy(pfit), deepcopy(nfit)
+    #pcur2, ncur2 = deepcopy(pfit), deepcopy(nfit)
     down, up = True, True
     while down or up:
         #work in both directions from the middle
@@ -149,7 +148,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             med = np.median(piece)
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
-            if pcur1:
+            if pcur1 is not None:
                 #pnew1 = fitmethod(pcur1, x_val, pdata)
                 pnew1, psig1 = curve_fit(pmodel, x_val, pdata, pcur1)
                 pnmodel = build_composite(pnew1, ptype)
@@ -158,7 +157,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['pos'][i][:,tc1] = transform(x_val)
                     apertures['pos'][i][tc1] = transform.mean
                 pcur1 = pnew1
-            if ncur1:
+            if ncur1 is not None:
                 #nnew1 = fitmethod(ncur1, x_val, ndata)
                 nnew1, nsig1 = curve_fit(nmodel, x_val, ndata, ncur1)
                 nnmodel = build_composite(nnew1, ptype)
@@ -174,10 +173,11 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             lb = max(tc2 - 20, 0)
             ub = min(tc2 + 20, ns-1)
             piece = robm(idata[:,(lb,ub)], axis=1)
+            junk, piece = zip(*interp_nan(list(enumerate(piece))))
             med = np.median(piece)
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
-            if pcur2:
+            if pcur2 is not None:
                 #pnew2 = fitmethod(pcur2, x_val, pdata)
                 pnew2, psig2 = curve_fit(pmodel, x_val, pdata, pcur2)
                 pnmodel = build_composite(pnew2, ptype)
@@ -186,7 +186,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['pos'][i][:,tc2] = transform(x_val)
                     apertures['pos'][i][tc2] = transform.mean
                 pcur2 = pnew2
-            if ncur2:
+            if ncur2 is not None:
                 #nnew2 = fitmethod(ncur2, x_val, ndata)
                 nnew2, nsig2 = curve_fit(nmodel, x_val, ndata, ncur2)
                 nnmodel = build_composite(nnew2, ptype)
