@@ -42,7 +42,7 @@ def interp_nan(points):
     x = np.array(x)
     y = np.array(y)
     nans, x2 = np.isnan(y), lambda z: z.nonzero()[0]
-    y[nans] = interp1d(x2(~nans), y[~nans], kind='cubic')(x2(nans))
+    y[nans] = interp1d(x2(~nans), y[~nans], kind='cubic', bounds_error=False)(x2(nans))
     return zip(x, y)
     
 def idlhash(a, b, list = False):
