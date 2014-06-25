@@ -7,6 +7,7 @@ from robuststats import robust_mean as robm, robust_sigma as robs, interp_nan
 from copy import deepcopy
 from scipy.interpolate import interp1d, griddata
 from itertools import chain
+import pdb
 
 posneg = {'pos':np.greater, 'neg':np.less}
 
@@ -109,6 +110,7 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     return x_data, build_composite(p_fit, ptype), build_composite(n_fit, ptype)
     
 def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptype = 'Gaussian'):
+    #pdb.set_trace()
     ns = idata.shape[1]
     midpoint = ns/2
     tc1, tc2 = midpoint, midpoint + 1
@@ -199,13 +201,22 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
         else:
             up = False
     
+    import shelve
+    f = shelve.open('/Users/gray/Desktop/trace-shelve')
+    f['pos'] = trace['pos']
+    f['neg'] = trace['neg']
+    
     if not fixdistort:
         return trace
     
-    if pcur1:
-        ap = np.array(zip(*apertures['pos']))
+    if pcur1 is not None:
+        if len(apertures) > 1:
+            ap = np.array(zip(*apertures['pos']))
+            nap, ns = ap.shape
+        else:
+            ap = np.array(apertures['pos'][0])
+            nap, ns = ap.shape, 1
         #subtract off the position of each aperture
-        nap, ns = ap.shape
         meds = np.median(ap, axis=1)
         meds = np.repeat(meds.reshape(nap, 1), ns, axis=1)
         ap -= meds
@@ -217,10 +228,14 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
         posfit
     else: posfit = None
     
-    if ncur1:
-        ap = np.array(zip(*apertures['neg']))
+    if ncur1 is not None:
+        if len(apertures) > 1:
+            ap = np.array(zip(*apertures['neg']))
+            nap, ns = ap.shape
+        else:
+            ap = np.array(apertures['neg'][0])
+            nap, ns = ap.shape, 1
         #subtract off the position of each aperture
-        nap, ns = ap.shape
         meds = np.median(ap, axis=1)
         meds = np.repeat(meds.reshape(nap, 1), ns, axis=1)
         ap -= meds
