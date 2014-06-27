@@ -11,6 +11,20 @@ import pdb
 
 posneg = {'pos':np.greater, 'neg':np.less}
 
+def offset1d(reference, target):
+    '''find the optimal pixel offset between reference and target
+    using cross-correlation'''
+    
+    #The actual cross-correlation
+    ycor = np.correlate(target, reference, mode='full')
+    
+    #Construct your pixel offset value array
+    offset = np.arange(ycor.size) - (target.size - 1)
+    
+    #optimal offset is at the maximum of the cross-correlation
+    return offset[np.nanargmax(ycor)]
+    
+
 def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     data = np.array(idata) #make sure we're dealing with an array
     if len(data.shape) > 1: #check for 2D array
@@ -140,6 +154,14 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     #pcur1, ncur1 = deepcopy(pfit), deepcopy(nfit)
     #pcur2, ncur2 = deepcopy(pfit), deepcopy(nfit)
     down, up = True, True
+    
+    #set up initial data for use with cross-correlation
+    piece0 = robm(idata[:, (max(tc1 - 20, 0), min(tc1 + 20, ns - 1))], axis=1)
+    junk, piece0 = zip(*interp_nan(list(enumerate(piece0))))
+    med = np.median(piece0)
+    p0 = np.clip(piece0, a_min = med, a_max = np.nanmax(piece0))
+    n0 = np.clip(piece0, a_min = np.nanmin(piece0), a_max = med)
+    
     while down or up:
         #work in both directions from the middle
         if tc1 >= 0:
@@ -151,6 +173,9 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur1 is not None:
+                offset = offset1d(p0, pdata)
+                pcur1 = [np.array([interp1d(x_val, pdata, kind='cubic')(f[1] + \
+                    offset), f[1] + offset, f[2]]) for f in fitp]
                 #pnew1 = fitmethod(pcur1, x_val, pdata)
                 pnew1, psig1 = curve_fit(pmodel, x_val, pdata, pcur1)
                 pnmodel = build_composite(pnew1, ptype)
@@ -159,7 +184,11 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['pos'][i][:,tc1] = transform(x_val)
                     apertures['pos'][i][tc1] = transform.mean
                 pcur1 = pnew1
+                #print tc1, pcur1
             if ncur1 is not None:
+                offset = offset1d(n0, ndata)
+                ncur1 = [np.array([interp1d(x_val, ndata, kind='cubic')(f[1] + \
+                    offset), f[1] + offset, f[2]]) for f in fitn]
                 #nnew1 = fitmethod(ncur1, x_val, ndata)
                 nnew1, nsig1 = curve_fit(nmodel, x_val, ndata, ncur1)
                 nnmodel = build_composite(nnew1, ptype)
@@ -168,6 +197,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['neg'][i][:,tc1] = transform(x_val)
                     apertures['neg'][i][tc1] = transform.mean
                 ncur1 = nnew1
+                #print tc1, ncur1
             tc1 -= 1
         else:
             down = False
@@ -180,6 +210,9 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur2 is not None:
+                offset = offset1d(p0, pdata)
+                pcur2 = [np.array([interp1d(x_val, pdata, kind='cubic')(f[1] + \
+                    offset), f[1] + offset, f[2]]) for f in fitp]
                 #pnew2 = fitmethod(pcur2, x_val, pdata)
                 pnew2, psig2 = curve_fit(pmodel, x_val, pdata, pcur2)
                 pnmodel = build_composite(pnew2, ptype)
@@ -188,7 +221,11 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['pos'][i][:,tc2] = transform(x_val)
                     apertures['pos'][i][tc2] = transform.mean
                 pcur2 = pnew2
+                #print tc2, pcur2
             if ncur2 is not None:
+                offset = offset1d(n0, ndata)
+                ncur2 = [np.array([interp1d(x_val, ndata, kind='cubic')(f[1] + \
+                    offset), f[1] + offset, f[2]]) for f in fitn]
                 #nnew2 = fitmethod(ncur2, x_val, ndata)
                 nnew2, nsig2 = curve_fit(nmodel, x_val, ndata, ncur2)
                 nnmodel = build_composite(nnew2, ptype)
@@ -197,20 +234,21 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                     trace['neg'][i][:,tc2] = transform(x_val)
                     apertures['neg'][i][tc2] = transform.mean
                 ncur2 = nnew2
+                #print tc2, ncur2
             tc2 += 1
         else:
             up = False
     
-    import shelve
-    f = shelve.open('/Users/gray/Desktop/trace-shelve')
-    f['pos'] = trace['pos']
-    f['neg'] = trace['neg']
+    #import shelve
+    #f = shelve.open('/Users/gray/Desktop/trace-shelve')
+    #f['pos'] = trace['pos']
+    #f['neg'] = trace['neg']
     
     if not fixdistort:
         return trace
     
     if pcur1 is not None:
-        if len(apertures) > 1:
+        if len(apertures['pos']) > 1:
             ap = np.array(zip(*apertures['pos']))
             nap, ns = ap.shape
         else:
@@ -229,7 +267,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     else: posfit = None
     
     if ncur1 is not None:
-        if len(apertures) > 1:
+        if len(apertures['neg']) > 1:
             ap = np.array(zip(*apertures['neg']))
             nap, ns = ap.shape
         else:
