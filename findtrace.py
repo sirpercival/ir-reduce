@@ -124,6 +124,7 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     return x_data, build_composite(p_fit, ptype), build_composite(n_fit, ptype)
     
 def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptype = 'Gaussian'):
+    '''move along the trace axis, fitting each position with a model of the PSF'''
     #pdb.set_trace()
     ns = idata.shape[1]
     midpoint = ns/2
@@ -174,7 +175,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur1 is not None:
                 offset = offset1d(p0, pdata)
-                pcur1 = [np.array([interp1d(x_val, pdata, kind='cubic')(f[1] + \
+                pcur1 = [np.array([interp1d(x_val, pdata, kind='cubic', bounds_error=False)(f[1] + \
                     offset), f[1] + offset, f[2]]) for f in fitp]
                 #pnew1 = fitmethod(pcur1, x_val, pdata)
                 pnew1, psig1 = curve_fit(pmodel, x_val, pdata, pcur1)
@@ -187,7 +188,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                 #print tc1, pcur1
             if ncur1 is not None:
                 offset = offset1d(n0, ndata)
-                ncur1 = [np.array([interp1d(x_val, ndata, kind='cubic')(f[1] + \
+                ncur1 = [np.array([interp1d(x_val, ndata, kind='cubic', bounds_error=False)(f[1] + \
                     offset), f[1] + offset, f[2]]) for f in fitn]
                 #nnew1 = fitmethod(ncur1, x_val, ndata)
                 nnew1, nsig1 = curve_fit(nmodel, x_val, ndata, ncur1)
@@ -211,7 +212,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
             if pcur2 is not None:
                 offset = offset1d(p0, pdata)
-                pcur2 = [np.array([interp1d(x_val, pdata, kind='cubic')(f[1] + \
+                pcur2 = [np.array([interp1d(x_val, pdata, kind='cubic', bounds_error=False)(f[1] + \
                     offset), f[1] + offset, f[2]]) for f in fitp]
                 #pnew2 = fitmethod(pcur2, x_val, pdata)
                 pnew2, psig2 = curve_fit(pmodel, x_val, pdata, pcur2)
@@ -224,7 +225,7 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
                 #print tc2, pcur2
             if ncur2 is not None:
                 offset = offset1d(n0, ndata)
-                ncur2 = [np.array([interp1d(x_val, ndata, kind='cubic')(f[1] + \
+                ncur2 = [np.array([interp1d(x_val, ndata, kind='cubic', bounds_error=False)(f[1] + \
                     offset), f[1] + offset, f[2]]) for f in fitn]
                 #nnew2 = fitmethod(ncur2, x_val, ndata)
                 nnew2, nsig2 = curve_fit(nmodel, x_val, ndata, ncur2)
@@ -250,18 +251,19 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     if pcur1 is not None:
         if len(apertures['pos']) > 1:
             ap = np.array(zip(*apertures['pos']))
-            nap, ns = ap.shape
+            ns, nap = ap.shape
         else:
             ap = np.array(apertures['pos'][0])
-            nap, ns = ap.shape, 1
+            ns, nap = ap.size, 1
         #subtract off the position of each aperture
         meds = np.median(ap, axis=1)
-        meds = np.repeat(meds.reshape(nap, 1), ns, axis=1)
+        meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
         ap -= meds
         #determine median offsets and fit with a polynomial
-        off_x = np.median(ap, axis=0)
+        off_x = np.median(ap, axis=0) if nap > 1 else ap
         pinit = poly.Polynomial1D(fitdegree)
         x_trace = np.arange(ns)
+        print x_trace.shape, off_x.shape
         posfit = fitmethod(pinit, x_trace, off_x)
         posfit
     else: posfit = None
@@ -269,16 +271,16 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     if ncur1 is not None:
         if len(apertures['neg']) > 1:
             ap = np.array(zip(*apertures['neg']))
-            nap, ns = ap.shape
+            ns, nap = ap.shape
         else:
             ap = np.array(apertures['neg'][0])
-            nap, ns = ap.shape, 1
+            ns, nap = ap.shape, 1
         #subtract off the position of each aperture
         meds = np.median(ap, axis=1)
-        meds = np.repeat(meds.reshape(nap, 1), ns, axis=1)
+        meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
         ap -= meds
         #determine median offsets and fit with a polynomial
-        off_x = np.median(ap, axis=0)
+        off_x = np.median(ap, axis=0) if nap > 1 else ap
         pinit = poly.Polynomial1D(fitdegree)
         x_trace = np.arange(ns)
         negfit = fitmethod(pinit, x_trace, off_x)
