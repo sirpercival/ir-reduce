@@ -247,39 +247,41 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     
     if not fixdistort:
         return trace
+        
+    #pdb.set_trace()
     
     if pcur1 is not None:
+        #identify the various aperture traces, subtract off the 
+        #median x-position of each one, determine the median offset
+        #across apertures, and fit with a polynomial
         if len(apertures['pos']) > 1:
-            ap = np.array(zip(*apertures['pos']))
+            ap = np.array(zip(*apertures['pos'])).squeeze()
             ns, nap = ap.shape
+            meds = np.median(ap, axis=1)
+            meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
         else:
-            ap = np.array(apertures['pos'][0])
+            ap = np.array(apertures['pos'][0]).squeeze()
             ns, nap = ap.size, 1
-        #subtract off the position of each aperture
-        meds = np.median(ap, axis=1)
-        meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
+            meds = np.median(ap)
         ap -= meds
-        #determine median offsets and fit with a polynomial
         off_x = np.median(ap, axis=0) if nap > 1 else ap
         pinit = poly.Polynomial1D(fitdegree)
         x_trace = np.arange(ns)
-        print x_trace.shape, off_x.shape
         posfit = fitmethod(pinit, x_trace, off_x)
         posfit
     else: posfit = None
     
     if ncur1 is not None:
         if len(apertures['neg']) > 1:
-            ap = np.array(zip(*apertures['neg']))
+            ap = np.array(zip(*apertures['neg'])).squeeze()
             ns, nap = ap.shape
+            meds = np.median(ap, axis=1)
+            meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
         else:
-            ap = np.array(apertures['neg'][0])
-            ns, nap = ap.shape, 1
-        #subtract off the position of each aperture
-        meds = np.median(ap, axis=1)
-        meds = np.repeat(meds.reshape(ns, 1), nap, axis=1)
+            ap = np.array(apertures['neg'][0]).squeeze()
+            ns, nap = ap.size, 1
+            meds = np.median(ap)
         ap -= meds
-        #determine median offsets and fit with a polynomial
         off_x = np.median(ap, axis=0) if nap > 1 else ap
         pinit = poly.Polynomial1D(fitdegree)
         x_trace = np.arange(ns)

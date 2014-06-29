@@ -772,7 +772,7 @@ class TracefitScreen(IRScreen):
         pdistort, ndistort = draw_trace(self.extractregion, self.xx, self.fit_params['pmodel'], \
             self.fit_params['nmodel'], fixdistort = True, fitdegree = self.fit_params['deg'])
         
-        im1, im2 = [x for x in copy.deepcopy(theapp.extract_pairs[self.pair_index])]
+        im1, im2 = [x for x in copy.deepcopy(self.theapp.extract_pairs[self.pair_index])]
         im1.load(); im2.load()
         #if self.current_flats:
         #    im1 = im_divide(im1, self.current_flats)
