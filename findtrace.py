@@ -5,7 +5,8 @@ from scipy.signal import argrelextrema, medfilt
 import numpy as np
 from robuststats import robust_mean as robm, robust_sigma as robs, interp_nan
 from copy import deepcopy
-from scipy.interpolate import interp1d, griddata
+from scipy.interpolate import interp1d#, griddata
+from scipy.ndimage.interpolation import geometric_transform
 from itertools import chain
 import pdb
 
@@ -292,10 +293,13 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     
     
 def undistort_imagearray(imarray, fit_distortion):
-    ny, nx = imarray.shape
-    yp, xp = np.mgrid[0:ny, 0:nx]
-    yd, xd = yp - fit_distortion(xp), xp
-    return griddata((yp, xp), imarray, (yd, xd), method='cubic')
+    return geometric_transform(imarray, fit_distortion)
+    #ny, nx = imarray.shape
+    #yp, xp = np.mgrid[0:ny, 0:nx]
+    #yd, xd = yp - fit_distortion(xp), xp
+    #print yp.shape, xp.shape, yd.shape, xd.shape, imarray.shape
+    #pdb.set_trace()
+    #return griddata((yp, xp), imarray, (yd, xd), method='cubic')
     
 def extract(fmodel, imarray, telluric, pn, lamp = None):
     fac = (1, 1) if pn == 'pos' else (-1, 1)
