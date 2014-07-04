@@ -106,7 +106,7 @@ class FitsImage(ScalableImage):
     
     def load(self, **kwargs):
         hdu = fits.open(self.fitsfile)
-        super(FitsImage, self).load(hdu[0].data, **kwargs)
+        super(FitsImage, self).load(hdu[0].data.astype(float), **kwargs)
         hdu.close()
     
     def update_fits(self, header_only = False):

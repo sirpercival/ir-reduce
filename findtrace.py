@@ -293,7 +293,14 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
     
     
 def undistort_imagearray(imarray, fit_distortion):
-    return geometric_transform(imarray, fit_distortion)
+    pdb.set_trace()
+    
+    def undistort(coords):
+        yp, xp = coords
+        yd, xd = yp - fit_distortion(xp), xp
+        return (yd, xd)
+    
+    return geometric_transform(imarray, undistort)
     #ny, nx = imarray.shape
     #yp, xp = np.mgrid[0:ny, 0:nx]
     #yd, xd = yp - fit_distortion(xp), xp
