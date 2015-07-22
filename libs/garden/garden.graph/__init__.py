@@ -4,7 +4,7 @@ Graph
 
 The :class:`Graph` widget is a widget for displaying plots. It supports
 drawing multiple plot with different colors on the Graph. It also supports
-a title, ticks, labeled ticks, grids and a log or linear representation on
+axes titles, ticks, labeled ticks, grids and a log or linear representation on
 both the x and y axis, independently.
 
 To display a plot. First create a graph which will function as a "canvas" for
@@ -50,8 +50,8 @@ The current availables plots are:
 
 '''
 
-__all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'SmoothLinePlot')
-__version__ = '0.3-dev'
+__all__ = ('Graph', 'Plot', 'MeshLinePlot', 'MeshStemPlot', 'LinePlot', 'SmoothLinePlot', 'ContourPlot')
+__version__ = '0.4-dev'
 
 from math import radians
 from kivy.uix.widget import Widget
@@ -64,11 +64,23 @@ from kivy.clock import Clock
 from kivy.graphics import Mesh, Color, Rectangle
 from kivy.graphics import Fbo
 from kivy.graphics.transformation import Matrix
+from kivy.graphics.texture import Texture
 from kivy.event import EventDispatcher
 from kivy.lang import Builder
 from kivy import metrics
 from math import log10, floor, ceil
 from decimal import Decimal
+try:
+    import numpy as np
+except ImportError as e:
+    np = None
+
+
+def identity(x):
+    return x
+
+def exp10(x):
+    return 10 ** x
 
 Builder.load_string('''
 #:kivy 1.1.0
@@ -97,6 +109,8 @@ class Graph(Widget):
     _trigger = ObjectProperty(None)
     # triggers only a repositioning of objects due to size/pos updates
     _trigger_size = ObjectProperty(None)
+    # triggers only a update of colors, e.g. tick_color
+    _trigger_color = ObjectProperty(None)
     # holds widget with the x-axis label
     _xlabel = ObjectProperty(None)
     # holds widget with the y-axis label
@@ -136,7 +150,7 @@ class Graph(Widget):
         super(Graph, self).__init__(**kwargs)
 
         with self.canvas:
-            self._fbo = Fbo(size=self.size, with_stencilbuffer=True)
+            self._fbo = Fbo(size=self.size, with_stencilbuffer=False)
 
         with self._fbo:
             self._background_color = Color(*self.background_color)
@@ -157,21 +171,17 @@ class Graph(Widget):
         self._plot_area = StencilView()
         self.add_widget(self._plot_area)
 
-        self._trigger = Clock.create_trigger(self._redraw_all)
-        self._trigger_size = Clock.create_trigger(self._redraw_size)
+        t = self._trigger = Clock.create_trigger(self._redraw_all)
+        ts = self._trigger_size = Clock.create_trigger(self._redraw_size)
+        tc = self._trigger_color = Clock.create_trigger(self._update_colors)
 
-        self.bind(center=self._trigger_size, padding=self._trigger_size,
-                  font_size=self._trigger_size, plots=self._trigger_size,
-                  x_grid=self._trigger_size, y_grid=self._trigger_size,
-                  draw_border=self._trigger_size)
-        self.bind(xmin=self._trigger, xmax=self._trigger,
-                  xlog=self._trigger, x_ticks_major=self._trigger,
-                  x_ticks_minor=self._trigger,
-                  xlabel=self._trigger, x_grid_label=self._trigger,
-                  ymin=self._trigger, ymax=self._trigger,
-                  ylog=self._trigger, y_ticks_major=self._trigger,
-                  y_ticks_minor=self._trigger,
-                  ylabel=self._trigger, y_grid_label=self._trigger)
+        self.bind(center=ts, padding=ts, precision=ts, plots=ts, x_grid=ts,
+                  y_grid=ts, draw_border=ts)
+        self.bind(xmin=t, xmax=t, xlog=t, x_ticks_major=t, x_ticks_minor=t,
+                  xlabel=t, x_grid_label=t, ymin=t, ymax=t, ylog=t,
+                  y_ticks_major=t, y_ticks_minor=t, ylabel=t, y_grid_label=t,
+                  font_size=t, label_options=t)
+        self.bind(tick_color=tc, background_color=tc, border_color=tc)
         self._trigger()
 
     def add_widget(self, widget):
@@ -323,22 +333,22 @@ class Graph(Widget):
         # now x and y tick mark labels
         if len(ylabels) and ylabel_grid:
             # horizontal size of the largest tick label, to have enough room
-            ylabels[0].text = precision % ypoints[0]
+            funcexp = exp10 if self.ylog else identity
+            funclog = log10 if self.ylog else identity
+            ylabels[0].text = precision % funcexp(ypoints[0])
             ylabels[0].texture_update()
             y1 = ylabels[0].texture_size
             y_start = y_next + (padding + y1[1] if len(xlabels) and xlabel_grid
-                                else 0) +\
-                                (padding + y1[1] if not y_next else 0)
+                                else 0) + \
+                               (padding + y1[1] if not y_next else 0)
             yextent = y + height - padding - y1[1] / 2.
-            if self.ylog:
-                ymax = log10(ymax)
-                ymin = log10(ymin)
-            ratio = (yextent - y_start) / float(ymax - ymin)
+
+            ymin = funclog(ymin)
+            ratio = (yextent - y_start) / float(funclog(ymax) - ymin)
             y_start -= y1[1] / 2.
-            func = (lambda x: 10 ** x) if self.ylog else lambda x: x
             y1 = y1[0]
             for k in range(len(ylabels)):
-                ylabels[k].text = precision % func(ypoints[k])
+                ylabels[k].text = precision % funcexp(ypoints[k])
                 ylabels[k].texture_update()
                 ylabels[k].size = ylabels[k].texture_size
                 y1 = max(y1, ylabels[k].texture_size[0])
@@ -349,22 +359,22 @@ class Graph(Widget):
             else:
                 x_next += y1 + padding
         if len(xlabels) and xlabel_grid:
-            func = log10 if self.xlog else lambda x: x
+            funcexp = exp10 if self.xlog else identity
+            funclog = log10 if self.xlog else identity
             # find the distance from the end that'll fit the last tick label
-            xlabels[0].text = precision % func(xpoints[-1])
+            xlabels[0].text = precision % funcexp(xpoints[-1])
             xlabels[0].texture_update()
             xextent = x + width - xlabels[0].texture_size[0] / 2. - padding
             # find the distance from the start that'll fit the first tick label
             if not x_next:
-                xlabels[0].text = precision % func(xpoints[0])
+                xlabels[0].text = precision % funcexp(xpoints[0])
                 xlabels[0].texture_update()
                 x_next = padding + xlabels[0].texture_size[0] / 2.
-            xmin = func(xmin)
-            ratio = (xextent - x_next) / float(func(self.xmax) - xmin)
-            func = (lambda x: 10 ** x) if self.xlog else lambda x: x
+            xmin = funclog(xmin)
+            ratio = (xextent - x_next) / float(funclog(self.xmax) - xmin)
             right = -1
             for k in range(len(xlabels)):
-                xlabels[k].text = precision % func(xpoints[k])
+                xlabels[k].text = precision % funcexp(xpoints[k])
                 # update the size so we can center the labels on ticks
                 xlabels[k].texture_update()
                 xlabels[k].size = xlabels[k].texture_size
@@ -384,10 +394,10 @@ class Graph(Widget):
             t = Matrix().translate(ylabel.center[0], ylabel.center[1], 0)
             t = t.multiply(Matrix().rotate(-radians(270), 0, 0, 1))
             ylabel.transform = t.multiply(
-                    Matrix().translate(
-                        -int(ylabel.center_x),
-                        -int(ylabel.center_y),
-                        0))
+                Matrix().translate(
+                    -int(ylabel.center_x),
+                    -int(ylabel.center_y),
+                    0))
         if x_overlap:
             for k in range(len(xlabels)):
                 xlabels[k].text = ''
@@ -421,6 +431,8 @@ class Graph(Widget):
         start = 0
         xpoints = self._ticks_majorx
         ypoints = self._ticks_majory
+        xpoints2 = self._ticks_minorx
+        ypoints2 = self._ticks_minory
         ylog = self.ylog
         xlog = self.xlog
         xmin = self.xmin
@@ -442,11 +454,29 @@ class Graph(Widget):
                 vert[k * 8 + 4] = vert[k * 8]
                 vert[k * 8 + 5] = top
             start += len(xpoints)
+        if len(xpoints2):
+            top = metrics.dp(8) + size[1]
+            ratio = (size[2] - size[0]) / float(xmax - xmin)
+            for k in range(start, len(xpoints2) + start):
+                vert[k * 8] = size[0] + (xpoints2[k - start] - xmin) * ratio
+                vert[k * 8 + 1] = size[1]
+                vert[k * 8 + 4] = vert[k * 8]
+                vert[k * 8 + 5] = top
+            start += len(xpoints2)
         if len(ypoints):
             top = size[2] if self.y_grid else metrics.dp(12) + size[0]
             ratio = (size[3] - size[1]) / float(ymax - ymin)
             for k in range(start, len(ypoints) + start):
                 vert[k * 8 + 1] = size[1] + (ypoints[k - start] - ymin) * ratio
+                vert[k * 8 + 5] = vert[k * 8 + 1]
+                vert[k * 8] = size[0]
+                vert[k * 8 + 4] = top
+            start += len(ypoints)
+        if len(ypoints2):
+            top = metrics.dp(8) + size[0]
+            ratio = (size[3] - size[1]) / float(ymax - ymin)
+            for k in range(start, len(ypoints2) + start):
+                vert[k * 8 + 1] = size[1] + (ypoints2[k - start] - ymin) * ratio
                 vert[k * 8 + 5] = vert[k * 8 + 1]
                 vert[k * 8] = size[0]
                 vert[k * 8 + 4] = top
@@ -461,6 +491,11 @@ class Graph(Widget):
         ymax = self.ymax
         for plot in self.plots:
             plot._update(xlog, xmin, xmax, ylog, ymin, ymax, size)
+
+    def _update_colors(self, *args):
+        self._mesh_ticks_color.rgba = tuple(self.tick_color)
+        self._background_color.rgba = tuple(self.background_color)
+        self._mesh_rect_color.rgba = tuple(self.border_color)
 
     def _redraw_all(self, *args):
         # add/remove all the required labels
@@ -547,6 +582,12 @@ class Graph(Widget):
         self._update_ticks(size)
         self._update_plots(size)
 
+    def _clear_buffer(self, *largs):
+        fbo = self._fbo
+        fbo.bind()
+        fbo.clear_buffer()
+        fbo.release()
+
     def add_plot(self, plot):
         '''Add a new plot to this graph.
 
@@ -564,6 +605,7 @@ class Graph(Widget):
         add = self._plot_area.canvas.add
         for instr in plot.get_drawings():
             add(instr)
+        plot.bind(on_clear_plot=self._clear_buffer)
         self.plots.append(plot)
 
     def remove_plot(self, plot):
@@ -584,7 +626,42 @@ class Graph(Widget):
         remove = self._plot_area.canvas.remove
         for instr in plot.get_drawings():
             remove(instr)
+        plot.unbind(on_clear_plot=self._clear_buffer)
         self.plots.remove(plot)
+    
+    def collide_plot(self, x, y):
+        '''Determine if the given coordinates fall inside the plot area.
+
+        :Parameters:
+            `x, y`:
+                The coordinates to test (in window coords).
+        '''
+        adj_x, adj_y = x - self._plot_area.pos[0], y - self._plot_area.pos[1]
+        return 0 <= adj_x <= self._plot_area.size[0] \
+               and 0 <= adj_y <= self._plot_area.size[1]
+    
+    def to_data(self, x, y):
+        '''Convert window coords to data coords.
+        
+        :Parameters:
+            `x, y`:
+                The coordinates to convert (in window coords).
+        '''
+        adj_x = float(x - self._plot_area.pos[0])
+        adj_y = float(y - self._plot_area.pos[1])
+        norm_x = adj_x / self._plot_area.size[0]
+        norm_y = adj_y / self._plot_area.size[1]
+        if self.xlog:
+            xmin, xmax = log10(self.xmin), log10(self.xmax)
+            conv_x = 10.**(norm_x * (xmax - xmin) + xmin)
+        else:
+            conv_x = norm_x * (self.xmax - self.xmin) + self.xmin
+        if self.ylog:
+            ymin, ymax = log10(self.ymin), log10(self.ymax)
+            conv_y = 10.**(norm_y * (ymax - ymin) + ymin)
+        else:
+            conv_y = norm_y * (self.ymax - self.ymin) + self.ymin
+        return [conv_x, conv_y]
 
     xmin = NumericProperty(0.)
     '''The x-axis minimum value.
@@ -741,11 +818,12 @@ class Graph(Widget):
     '''
 
     padding = NumericProperty('5dp')
-    '''Padding distances between the labels, titles and graph, as well between
-    the widget and the objects near the boundaries.
+    '''Padding distances between the labels, axes titles and graph, as
+    well between the widget and the objects near the boundaries.
 
     :data:`padding` is a :class:`~kivy.properties.NumericProperty`, defaults
     to 5dp.
+
     '''
 
     font_size = NumericProperty('15sp')
@@ -785,11 +863,21 @@ class Graph(Widget):
 
 class Plot(EventDispatcher):
     '''Plot class, see module documentation for more information.
+
+    :Events:
+        `on_clear_plot`
+            Fired before a plot updates the display and lets the fbo know that
+            it should clear the old drawings.
+
+    ..versionadded:: 0.4
     '''
+
+    __events__ = ('on_clear_plot', )
+
     # most recent values of the params used to draw the plot
     params = DictProperty({'xlog': False, 'xmin': 0, 'xmax': 100,
-                            'ylog': False, 'ymin': 0, 'ymax': 100,
-                            'size': (0, 0, 0, 0)})
+                           'ylog': False, 'ymin': 0, 'ymax': 100,
+                           'size': (0, 0, 0, 0)})
 
     color = ListProperty([1, 1, 1, 1])
     '''Color of the plot.
@@ -840,9 +928,10 @@ class Plot(EventDispatcher):
     def create_drawings(self):
         pass
 
-    # draw the plot according to the params
-    def draw(self):
-        pass
+    # draw the plot according to the params. It dispatches on_clear_plot
+    # so derived classes should call super before updating.
+    def draw(self, *largs):
+        self.dispatch('on_clear_plot')
 
     def iterate_points(self):
         '''Iterate on all the points adjusted to the graph settings
@@ -860,6 +949,8 @@ class Plot(EventDispatcher):
                 (funcx(x) - xmin) * ratiox + size[0],
                 (funcy(y) - ymin) * ratioy + size[1])
 
+    def on_clear_plot(self, *largs):
+        pass
 
     # compatibility layer
     _update = update
@@ -874,10 +965,11 @@ class MeshLinePlot(Plot):
     def create_drawings(self):
         self._color = Color(*self.color)
         self._mesh = Mesh(mode='line_strip')
-        self.bind(color=lambda instr, value: setattr(self._color.rgba, value))
+        self.bind(color=lambda instr, value: setattr(self._color, "rgba", value))
         return [self._color, self._mesh]
 
     def draw(self, *args):
+        super(MeshLinePlot, self).draw(*args)
         points = self.points
         mesh = self._mesh
         vert = mesh.vertices
@@ -902,7 +994,6 @@ class MeshLinePlot(Plot):
             vert[k * 4 + 1] = (funcy(points[k][1]) - ymin) * ratioy + size[1]
         mesh.vertices = vert
 
-
     def _set_mode(self, value):
         if hasattr(self, '_mesh'):
             self._mesh.mode = value
@@ -921,6 +1012,7 @@ class MeshStemPlot(MeshLinePlot):
     '''
 
     def draw(self, *args):
+        super(MeshStemPlot, self).draw(*args)
         points = self.points
         mesh = self._mesh
         self._mesh.mode = 'lines'
@@ -949,6 +1041,37 @@ class MeshStemPlot(MeshLinePlot):
         mesh.vertices = vert
 
 
+class LinePlot(Plot):
+    '''LinePlot draws using a standard Line object.
+    '''
+    
+    '''Args:
+    line_width (float) - the width of the graph line
+    '''
+    def __init__(self, **kwargs):
+        self._line_width = kwargs.get('line_width', 1)
+        super(LinePlot, self).__init__(**kwargs)
+    
+    def create_drawings(self):
+        from kivy.graphics import Line, RenderContext
+
+        self._grc = RenderContext(
+                use_parent_modelview=True,
+                use_parent_projection=True)
+        with self._grc:
+            self._gcolor = Color(*self.color)
+            self._gline = Line(points=[], cap='none', width=self._line_width, joint='round')
+
+        return [self._grc]
+    
+    def draw(self, *args):
+        super(LinePlot, self).draw(*args)
+        # flatten the list
+        points = []
+        for x, y in self.iterate_points():
+            points += [x, y]
+        self._gline.points = points
+        
 class SmoothLinePlot(Plot):
     '''Smooth Plot class, see module documentation for more information.
     This plot use a specific Fragment shader for a custom anti aliasing.
@@ -981,13 +1104,13 @@ class SmoothLinePlot(Plot):
 
     def create_drawings(self):
         from kivy.graphics import Line, RenderContext
-        from kivy.graphics.texture import Texture
 
         # very first time, create a texture for the shader
         if not hasattr(SmoothLinePlot, '_texture'):
             tex = Texture.create(size=(1, 64), colorfmt='rgb')
-            tex.blit_buffer(SmoothLinePlot.GRADIENT_DATA, colorfmt='rgb')
+            tex.add_reload_observer(SmoothLinePlot._smooth_reload_observer)
             SmoothLinePlot._texture = tex
+            SmoothLinePlot._smooth_reload_observer(tex)
 
         self._grc = RenderContext(fs=SmoothLinePlot.SMOOTH_FS,
                 use_parent_modelview=True,
@@ -999,7 +1122,12 @@ class SmoothLinePlot(Plot):
 
         return [self._grc]
 
+    @staticmethod
+    def _smooth_reload_observer(texture):
+        texture.blit_buffer(SmoothLinePlot.GRADIENT_DATA, colorfmt="rgb")
+
     def draw(self, *args):
+        super(SmoothLinePlot, self).draw(*args)
         # flatten the list
         points = []
         for x, y in self.iterate_points():
@@ -1007,54 +1135,120 @@ class SmoothLinePlot(Plot):
         self._gline.points = points
 
 
+class ContourPlot(Plot):
+    """
+    ContourPlot visualizes 3 dimensional data as an intensity map image.
+    The user must first specify 'xrange' and 'yrange' (tuples of min,max) and then 'data', the intensity values.
+    X and Y values are assumed to be linearly spaced values from xrange/yrange and the dimensions of 'data'.
+    The color values are automatically scaled to the min and max z range of the data set.
+    """
+    _image = ObjectProperty(None)
+    data = ObjectProperty(None)
+    xrange = ListProperty([0, 100])
+    yrange = ListProperty([0, 100])
+
+    def __init__(self, **kwargs):
+        super(ContourPlot, self).__init__(**kwargs)
+        self.bind(data=self.ask_draw, xrange=self.ask_draw, yrange=self.ask_draw)
+
+    def create_drawings(self):
+        self._image = Rectangle()
+        self._color = Color([1, 1, 1, 1])
+        self.bind(color=lambda instr, value: setattr(self._color, 'rgba', value))
+        return [self._color, self._image]
+
+    def draw(self, *args):
+        super(ContourPlot, self).draw(*args)
+        data = self.data
+        xdim, ydim = data.shape
+
+        # Find the minimum and maximum z values
+        zmax = data.max()
+        zmin = data.min()
+        rgb_scale_factor = 1.0 / (zmax - zmin) * 255
+        # Scale the z values into RGB data
+        buf = np.array(data, dtype=float, copy=True)
+        np.subtract(buf, zmin, out=buf)
+        np.multiply(buf, rgb_scale_factor, out=buf)
+        # Duplicate into 3 dimensions (RGB) and convert to byte array
+        buf = np.asarray(buf, dtype=np.uint8)
+        buf = np.expand_dims(buf, axis=2)
+        buf = np.concatenate((buf, buf, buf), axis=2)
+        buf = np.reshape(buf, (xdim, ydim, 3))
+
+        charbuf = bytearray(np.reshape(buf, (buf.size)))
+        self._texture = Texture.create(size=(xdim, ydim), colorfmt='rgb')
+        self._texture.blit_buffer(charbuf, colorfmt='rgb', bufferfmt='ubyte')
+        image = self._image
+        image.texture = self._texture
+
+        params = self._params
+        funcx = log10 if params['xlog'] else lambda x: x
+        funcy = log10 if params['ylog'] else lambda x: x
+        xmin = funcx(params['xmin'])
+        ymin = funcy(params['ymin'])
+        size = params['size']
+        ratiox = (size[2] - size[0]) / float(funcx(params['xmax']) - xmin)
+        ratioy = (size[3] - size[1]) / float(funcy(params['ymax']) - ymin)
+
+        bl = (funcx(self.xrange[0]) - xmin) * ratiox + size[0], (funcy(self.yrange[0]) - ymin) * ratioy + size[1]
+        tr = (funcx(self.xrange[1]) - xmin) * ratiox + size[0], (funcy(self.yrange[1]) - ymin) * ratioy + size[1]
+        image.pos = bl
+        w = tr[0] - bl[0]
+        h = tr[1] - bl[1]
+        image.size = (w, h)
+
+
 if __name__ == '__main__':
     import itertools
-    from math import sin, cos
+    from math import sin, cos, pi
     from kivy.utils import get_color_from_hex as rgb
+    from kivy.uix.boxlayout import BoxLayout
     from kivy.app import App
 
     class TestApp(App):
 
         def build(self):
-
+            b = BoxLayout(orientation='vertical')
             # example of a custom theme
             colors = itertools.cycle([
                 rgb('7dac9f'), rgb('dc7062'), rgb('66a8d4'), rgb('e5b060')])
             graph_theme = {
                 'label_options': {
-                    'color': rgb('444444'),
+                    'color': rgb('444444'),  # color of tick labels and titles
                     'bold': True},
-                'background_color': rgb('f8f8f2'),
-                'tick_color': rgb('808080'),
-                'border_color': rgb('808080')}
+                'background_color': rgb('f8f8f2'),  # back ground color of canvas
+                'tick_color': rgb('808080'),  # ticks and grid
+                'border_color': rgb('808080')}  # border drawn around each graph
 
             graph = Graph(
-                    xlabel='Cheese',
-                    ylabel='Apples',
-                    x_ticks_minor=5,
-                    x_ticks_major=25,
-                    y_ticks_major=1,
-                    y_grid_label=True,
-                    x_grid_label=True,
-                    padding=5,
-                    xlog=False,
-                    ylog=False,
-                    x_grid=True,
-                    y_grid=True,
-                    xmin=-50,
-                    xmax=50,
-                    ymin=-1,
-                    ymax=1,
-                    **graph_theme)
+                xlabel='Cheese',
+                ylabel='Apples',
+                x_ticks_minor=5,
+                x_ticks_major=25,
+                y_ticks_major=1,
+                y_grid_label=True,
+                x_grid_label=True,
+                padding=5,
+                xlog=False,
+                ylog=False,
+                x_grid=True,
+                y_grid=True,
+                xmin=-50,
+                xmax=50,
+                ymin=-1,
+                ymax=1,
+                **graph_theme)
 
             plot = SmoothLinePlot(color=next(colors))
             plot.points = [(x / 10., sin(x / 50.)) for x in range(-500, 501)]
+            # for efficiency, the x range matches xmin, xmax 
             graph.add_plot(plot)
 
             plot = MeshLinePlot(color=next(colors))
-            plot.points = [(x / 10., cos(x / 50.)) for x in range(-600, 501)]
+            plot.points = [(x / 10., cos(x / 50.)) for x in range(-500, 501)]
             graph.add_plot(plot)
-            self.plot = plot
+            self.plot = plot  # this is the moving graph, so keep a reference
 
             plot = MeshStemPlot(color=next(colors))
             graph.add_plot(plot)
@@ -1062,10 +1256,70 @@ if __name__ == '__main__':
 
             Clock.schedule_interval(self.update_points, 1 / 60.)
 
-            return graph
+            graph2 = Graph(
+                xlabel='Position (m)',
+                ylabel='Time (s)',
+                x_ticks_minor=0,
+                x_ticks_major=1,
+                y_ticks_major=10,
+                y_grid_label=True,
+                x_grid_label=True,
+                padding=5,
+                xlog=False,
+                ylog=False,
+                xmin=0,
+                ymin=0,
+                **graph_theme)
+            b.add_widget(graph)
+
+            if np is not None:
+                (xbounds, ybounds, data) = self.make_contour_data()
+                # This is required to fit the graph to the data extents
+                graph2.xmin, graph2.xmax = xbounds
+                graph2.ymin, graph2.ymax = ybounds
+
+                plot = ContourPlot()
+                plot.data = data
+                plot.xrange = xbounds
+                plot.yrange = ybounds
+                plot.color = [1, 0.7, 0.2, 1]
+                graph2.add_plot(plot)
+
+                b.add_widget(graph2)
+                self.contourplot = plot
+
+                Clock.schedule_interval(self.update_contour, 1 / 60.)
+
+            return b
+
+        def make_contour_data(self, ts=0):
+                omega = 2 * pi / 30
+                k = (2 * pi) / 2.0
+
+                ts = sin(ts * 2) + 1.5  # emperically determined 'pretty' values
+                npoints = 100
+                data = np.ones((npoints, npoints))
+
+                position = [ii * 0.1 for ii in range(npoints)]
+                time = [(ii % 100) * 0.6 for ii in range(npoints)]
+
+                for ii, t in enumerate(time):
+                    for jj, x in enumerate(position):
+                        data[ii, jj] = sin(k * x + omega * t) + sin(-k * x + omega * t) / ts
+                return ((0, max(position)), (0, max(time)), data)
 
         def update_points(self, *args):
-            self.plot.points = [(x / 10., cos(Clock.get_time() + x / 50.)) for x in range(-600, 501)]
+            self.plot.points = [(x / 10., cos(Clock.get_time() + x / 50.)) for x in range(-500, 501)]
 
+        def update_contour(self, *args):
+            _, _, self.contourplot.data[:] = self.make_contour_data(Clock.get_time())  
+            # this does not trigger an update, because we replace the
+            # values of the arry and do not change the object.
+            # However, we cannot do "...data = make_contour_data()" as
+            # kivy will try to check for the identity of the new and
+            # old values.  In numpy, 'nd1 == nd2' leads to an error
+            # (you have to use np.all).  Ideally, property should be patched 
+            # for this.
+            self.contourplot.ask_draw()
 
     TestApp().run()

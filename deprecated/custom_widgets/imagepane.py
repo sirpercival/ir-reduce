@@ -1,13 +1,8 @@
 
-from kivy.uix.scatter import Scatter
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.stencilview import StencilView
-from kivy.uix.slider import Slider
 from kivy.graphics.texture import Texture
 from kivy.lang import Builder
-from kivy.uix.widget import Widget
 from kivy.properties import ObjectProperty, NumericProperty, AliasProperty, ListProperty
-from numpy import nanmin, nanmax
 
 from fitsimage import FitsImage, ScalableImage
 from numpy import array
@@ -17,8 +12,6 @@ default_image = ScalableImage()
 default_image.load(data, scalemode='gamma', factor=0.3)
 
 Builder.load_string('''
-#:kivy 1.8.0
-
 <ImagePane>:
     orientation: 'vertical'
     imcanvas: the_image.canvas
@@ -158,7 +151,6 @@ class ImagePane(BoxLayout):
             'mode':self.ids.smode.text, 'factor':factor}
         self.data.change_parameters(info)
         self.update_display()
-            
         
 
 if __name__ == '__main__':

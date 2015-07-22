@@ -1,14 +1,9 @@
-from astropy.modeling import functional_models as fm, polynomial as poly, \
-    SummedCompositeModel, fitting
-from scipy.optimize import curve_fit
+from astropy.modeling import models, fitting
 from scipy.signal import argrelextrema, medfilt
 import numpy as np
-from robuststats import robust_mean as robm, robust_sigma as robs, interp_nan
 from copy import deepcopy
 from scipy.interpolate import interp1d#, griddata
 from scipy.ndimage.interpolation import geometric_transform
-from itertools import chain
-import pdb
 
 posneg = {'pos':np.greater, 'neg':np.less}
 
@@ -29,7 +24,7 @@ def offset1d(reference, target):
 def find_peaks(idata, npeak = 1, tracedir = None, pn = 'pos'):
     data = np.array(idata) #make sure we're dealing with an array
     if len(data.shape) > 1: #check for 2D array
-        if traceder is None:
+        if tracedir is None:
             tracedir = 1 #assume that the second axis is the right one...
             #if idata is 2D, compress along the trace using a robust mean
         data = robm(data, axis = tracedir)
@@ -124,127 +119,111 @@ def fit_multipeak(idata, npeak = 1, pos = None, wid = 3., ptype = 'Gaussian'):
     
     return x_data, build_composite(p_fit, ptype), build_composite(n_fit, ptype)
     
-def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptype = 'Gaussian'):
+def fit_section(model, data, x, data0, init):
+    '''fit a section of the trace to the model'''
+    offset = offset1d(data0, data)
+    current = [np.array([interp1d(x, data, kind='cubic', bounds_error=False)(f[1] + \
+        offset), f[1] + offset, f[2]]) for f in init]
+    newf, sig = curve_fit(model, x, data, current)
+    return newf
+    
+def separate_data(bin_center, bin_width, data):
+    '''average data in the bin, and separate into positive 
+    and negative traces via the median'''
+    lb = max(bin_center - bin_width, 0)
+    ub = min(bin_center + bin_width, data.shape[1]-1)
+    piece = robm(data[:, (lb, ub)], axis=1)
+    junk, piece = zip(*interp_nan(list(enumerate(piece))))
+    med = np.median(piece)
+    return np.clip(piece, a_min=med, a_max = np.nanmax(piece)), \
+        np.clip(piece, a_min = np.nanmin(piece), a_max = med)
+    
+def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, \
+    fitdegree = 2, ptype = 'Gaussian', bin = 1):
     '''move along the trace axis, fitting each position with a model of the PSF'''
-    #pdb.set_trace()
-    ns = idata.shape[1]
-    midpoint = ns/2
-    tc1, tc2 = midpoint, midpoint + 1
+    nrow, ns = idata.shape
+    if bin < 1:
+        bin = 1
+    nbin = int(ns / bin)
+    print nbin, ns, bin
+    tc = np.linspace(bin, ns-bin, num=nbin)
+    tc1 = int(nbin / 2)
+    tc2 = tc1 + 1
     fitp = deconstruct_composite(pfit)
     fitn = deconstruct_composite(nfit)
     p_amp, p_mean, p_sig = get_individual_params(*fitp)
     n_amp, n_mean, n_sig = get_individual_params(*fitn)
     n_p = len(p_mean)
     n_n = len(n_mean)
-    
-    #back-convert the custom model into a composite model
-    #fitp = build_composite(pfit, ptype)
-    #fitn = build_composite(nfit, ptype)
 
-    #trace = {'pos':[np.zeros(idata.shape) for _ in fitp._transforms], \
-    #    'neg':[np.zeros(idata.shape) for _ in fitn._transforms]}
-    #apertures = {'pos':[range(ns) for _ in fitp._transforms], \
-    #    'neg':[range(ns) for _ in fitn._transforms]}
-    trace = {'pos':[np.zeros(idata.shape) for _ in p_mean], \
-        'neg':[np.zeros(idata.shape) for _ in n_mean]}
-    apertures = {'pos':[range(ns) for _ in p_mean], \
-        'neg':[range(ns) for _ in n_mean]}
+    trace = {'pos':[np.zeros((nrow, nbin)) for _ in p_mean], \
+        'neg':[np.zeros((nrow, nbin)) for _ in n_mean]}
+    apertures = {'pos':[np.zeros(nbin) for _ in p_mean], \
+        'neg':[np.zeros(nbin) for _ in n_mean]}
 
     pcur1, ncur1 = deepcopy(fitp), deepcopy(fitn)
     pcur2, ncur2 = deepcopy(fitp), deepcopy(fitn)
     pmodel, nmodel = multi_peak_model(ptype, n_p), multi_peak_model(ptype, n_n)
-    #pcur1, ncur1 = deepcopy(pfit), deepcopy(nfit)
-    #pcur2, ncur2 = deepcopy(pfit), deepcopy(nfit)
     down, up = True, True
     
     #set up initial data for use with cross-correlation
-    piece0 = robm(idata[:, (max(tc1 - 20, 0), min(tc1 + 20, ns - 1))], axis=1)
-    junk, piece0 = zip(*interp_nan(list(enumerate(piece0))))
-    med = np.median(piece0)
-    p0 = np.clip(piece0, a_min = med, a_max = np.nanmax(piece0))
-    n0 = np.clip(piece0, a_min = np.nanmin(piece0), a_max = med)
+    p0, n0 = separate_data(tc[tc1], 20, idata)
     
     while down or up:
         #work in both directions from the middle
         if tc1 >= 0:
-            lb = max(tc1 - 20, 0)
-            ub = min(tc1 + 20, ns-1)
-            piece = robm(idata[:,(lb,ub)], axis=1)
-            junk, piece = zip(*interp_nan(list(enumerate(piece))))
-            med = np.median(piece)
-            pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
-            ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
+            pdata, ndata = separate_data(tc[tc1], 20, idata)
             if pcur1 is not None:
-                offset = offset1d(p0, pdata)
-                pcur1 = [np.array([interp1d(x_val, pdata, kind='cubic', bounds_error=False)(f[1] + \
-                    offset), f[1] + offset, f[2]]) for f in fitp]
-                #pnew1 = fitmethod(pcur1, x_val, pdata)
-                pnew1, psig1 = curve_fit(pmodel, x_val, pdata, pcur1)
+                pnew1 = fit_section(pmodel, pdata, x_val, p0, fitp)
                 pnmodel = build_composite(pnew1, ptype)
-                #for i, transform in enumerate(pnew1._transforms):
                 for i, transform in enumerate(pnmodel._transforms):
                     trace['pos'][i][:,tc1] = transform(x_val)
-                    apertures['pos'][i][tc1] = transform.mean
+                    print transform.mean
+                    apertures['pos'][i][tc1] = transform.mean.value
                 pcur1 = pnew1
-                #print tc1, pcur1
             if ncur1 is not None:
-                offset = offset1d(n0, ndata)
-                ncur1 = [np.array([interp1d(x_val, ndata, kind='cubic', bounds_error=False)(f[1] + \
-                    offset), f[1] + offset, f[2]]) for f in fitn]
-                #nnew1 = fitmethod(ncur1, x_val, ndata)
-                nnew1, nsig1 = curve_fit(nmodel, x_val, ndata, ncur1)
+                nnew1 = fit_section(nmodel, ndata, x_val, n0, fitn)
                 nnmodel = build_composite(nnew1, ptype)
-                #for i, transform in enumerate(nnew1._transforms):
                 for i, transform in enumerate(nnmodel._transforms):
                     trace['neg'][i][:,tc1] = transform(x_val)
-                    apertures['neg'][i][tc1] = transform.mean
+                    apertures['neg'][i][tc1] = transform.mean.value
                 ncur1 = nnew1
-                #print tc1, ncur1
-            tc1 -= 1
+            tc1 -= bin
         else:
             down = False
-        if tc2 < ns:
-            lb = max(tc2 - 20, 0)
-            ub = min(tc2 + 20, ns-1)
-            piece = robm(idata[:,(lb,ub)], axis=1)
-            junk, piece = zip(*interp_nan(list(enumerate(piece))))
-            med = np.median(piece)
-            pdata = np.clip(piece,a_min=med,a_max=np.nanmax(piece))
-            ndata = np.clip(piece,a_min=np.nanmin(piece),a_max=med)
+        if tc2 < nbin:
+            pdata, ndata = separate_data(tc[tc2], 20, idata)
             if pcur2 is not None:
-                offset = offset1d(p0, pdata)
-                pcur2 = [np.array([interp1d(x_val, pdata, kind='cubic', bounds_error=False)(f[1] + \
-                    offset), f[1] + offset, f[2]]) for f in fitp]
-                #pnew2 = fitmethod(pcur2, x_val, pdata)
-                pnew2, psig2 = curve_fit(pmodel, x_val, pdata, pcur2)
+                pnew2 = fit_section(pmodel, pdata, x_val, p0, fitp)
                 pnmodel = build_composite(pnew2, ptype)
                 #for i, transform in enumerate(pnew2._transforms):
                 for i, transform in enumerate(pnmodel._transforms):
                     trace['pos'][i][:,tc2] = transform(x_val)
-                    apertures['pos'][i][tc2] = transform.mean
+                    apertures['pos'][i][tc2] = transform.mean.value
                 pcur2 = pnew2
                 #print tc2, pcur2
             if ncur2 is not None:
-                offset = offset1d(n0, ndata)
-                ncur2 = [np.array([interp1d(x_val, ndata, kind='cubic', bounds_error=False)(f[1] + \
-                    offset), f[1] + offset, f[2]]) for f in fitn]
-                #nnew2 = fitmethod(ncur2, x_val, ndata)
-                nnew2, nsig2 = curve_fit(nmodel, x_val, ndata, ncur2)
+                nnew2 = fit_section(nmodel, ndata, x_val, n0, fitn)
                 nnmodel = build_composite(nnew2, ptype)
                 #for i, transform in enumerate(nnew2._transforms):
                 for i, transform in enumerate(nnmodel._transforms):
                     trace['neg'][i][:,tc2] = transform(x_val)
-                    apertures['neg'][i][tc2] = transform.mean
+                    apertures['neg'][i][tc2] = transform.mean.value
                 ncur2 = nnew2
                 #print tc2, ncur2
-            tc2 += 1
+            tc2 += bin
         else:
             up = False
     
-    #import shelve
-    #f = shelve.open('/Users/gray/Desktop/trace-shelve')
+    import shelve
+    f = shelve.open('/Users/gray/Desktop/trace-shelve')
     #f['pos'] = trace['pos']
     #f['neg'] = trace['neg']
+    f['pos'] = np.array(apertures['pos']).squeeze()
+    f['neg'] = np.array(apertures['neg']).squeeze()
+    f.close()
+    
+    #quit()
     
     if not fixdistort:
         return trace
@@ -266,10 +245,8 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             meds = np.median(ap)
         ap -= meds
         off_x = np.median(ap, axis=0) if nap > 1 else ap
-        pinit = poly.Polynomial1D(fitdegree)
-        x_trace = np.arange(ns)
-        posfit = fitmethod(pinit, x_trace, off_x)
-        posfit
+        x_trace = tc
+        posfit = polyfit(x_trace, off_x, fitdegree)
     else: posfit = None
     
     if ncur1 is not None:
@@ -284,16 +261,15 @@ def draw_trace(idata, x_val, pfit, nfit, fixdistort = False, fitdegree = 2, ptyp
             meds = np.median(ap)
         ap -= meds
         off_x = np.median(ap, axis=0) if nap > 1 else ap
-        pinit = poly.Polynomial1D(fitdegree)
-        x_trace = np.arange(ns)
-        negfit = fitmethod(pinit, x_trace, off_x)
+        x_trace = tc
+        negfit = polyfit(x_trace, off_x, fitdegree)
     else: negfit = None
     
     return posfit, negfit
     
     
 def undistort_imagearray(imarray, fit_distortion):
-    pdb.set_trace()
+    #pdb.set_trace()
     
     def undistort(coords):
         yp, xp = coords

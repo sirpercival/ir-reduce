@@ -2,9 +2,9 @@ import numpy as np
 import json
 from copy import copy
 from scipy.interpolate import interp1d
-from astropy.modeling import polynomial as poly, fitting
+from astropy.modeling import models, fitting
 
-fitmethod = fitting.NonLinearLSQFitter()
+fitmethod = fitting.LevMarLSQFitter()
 
 def calibrate_wavelength(cal, linelist, srange, niter = 2):
     '''linelist file should be a json file with 2
@@ -22,7 +22,7 @@ def calibrate_wavelength(cal, linelist, srange, niter = 2):
     ncal = len(cal)
     
     #construct an initial guess for the wavelength range
-    p_init = poly.Polynomial1D(2) #initialize to linear
+    p_init = models.Polynomial1D(2) #initialize to linear
     p_init.parameters = [srange[0], float(srange[1]) / float(ncal), 0]
     lam0 = p_init(np.arange(ncal))
     R = np.median(lam0) / np.fabs(np.median(lam0[0:-2] - lam0[1:-1]))
@@ -50,7 +50,7 @@ def calibrate_wavelength(cal, linelist, srange, niter = 2):
         base_ind = np.arange(nx)
         n_cor_sec = 2
         nel_per_sec = np.ceil(float(nx) / float(n_cor_sec))
-        np = 4 # num points used for fitting correlative max
+        n_pt = 4 # num points used for fitting correlative max
         #match the telluric to the fiducial
         offsets = np.zeros(n_cor_sec) + np.nan
         offsets_lambda = np.zeros(n_cor_sec) + np.nan
@@ -65,19 +65,19 @@ def calibrate_wavelength(cal, linelist, srange, niter = 2):
                 np.nan_to_num(ref_data[ind]), mode = 'full')
             lag = np.arange(len(cc)) - len(cc)/2
             imax = np.argmax(cc)
-            if imax <= np or imax >= len(ref_data) - 1 - np:
+            if imax <= n_pt or imax >= len(ref_data) - 1 - n_pt:
                 return None
             #fit the maximum of the cross-correlation function with a 2nd-degree polynomial
-            p = fitmethod(p_init, lag[imax - np : imax + np], cc[imax - np : imax + np])
+            p = fitmethod(p_init, lag[imax - n_pt : imax + n_pt], cc[imax - n_pt : imax + n_pt])
             offset = -.5 * p.parameters[1] / p.parameters[2] #find exact center
             #store the result
             cen_pix[j] = np.median(ind)
-            cen_wvl[j] = lwav0[cen_pix[j]]
-            offsets_lambda[j] = interp1d(ind, lwav0[ind])(cen_pix[j] + offset) - \
-                interp1d(ind, lwav0[ind])(cen_pix[j])
+            cen_wvl[j] = lwav1[cen_pix[j]]
+            offsets_lambda[j] = interp1d(ind, lwav1[ind])(cen_pix[j] + offset) - \
+                interp1d(ind, lwav1[ind])(cen_pix[j])
             offsets[j] = offset
         #fit the changes and apply offsets to the initial fit
-        fit = fitmethod(poly.Polynomial1D(2), cen_pix, offsets_lambda)
+        fit = fitmethod(models.Polynomial1D(2), cen_pix, offsets_lambda)
         p_init.parameters += fit.parameters
         lam0 = p_init(np.arange(ncal))
     

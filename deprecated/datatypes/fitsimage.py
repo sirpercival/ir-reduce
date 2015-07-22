@@ -1,8 +1,14 @@
 from astropy.io import fits
 import numpy as np 
 from scipy.misc import bytescale
-from robuststats import array_process
-from astropy.modeling import functional_models as fm, fitting
+from robustdata import RobustData
+from astropy.modeling.models import Linear1D
+
+def grab_header(file):
+    hdul = fits.open(file)
+    header = hdul[0].header
+    hdul.close()
+    return header
 
 def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
     num_per_col = int(float(num_points) / float(num_per_row) + 0.5)
@@ -15,20 +21,20 @@ def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
         for j in xrange(num_per_col):
             y = int(j * col_skip + 0.5)
             data.append(imarray[x, y])
-    data = np.sort(np.array(data))
-    data_min = np.nanmin(data)
-    data_max = np.nanmax(data)
+    data = RobustData(data)
+    data.sort()
+    data.replace_nans()
+    data_min, data_max = data.min(), data.max()
     center_pixel = (num_points + 1) / 2
     if data_min == data_max:
         return data_min, data_max
     med = np.median(data)
-    clipped_data = array_process(data, 3., compress=True)
-    if clipped_data.size < int(num_points/2.0):
+    data.clipped(inplace=True)
+    if data.size < int(num_points/2.0):
         return data_min, data_max
-    x_data = np.arange(clipped_data.size)
-    p_init = fm.Linear1D(1, 0)
-    fit = fitting.NonLinearLSQFitter()
-    p = fit(p_init, x_data, clipped_data)
+    x_data = np.arange(data.size)
+    p_init = Linear1D(1, 0)
+    p = data.fit_to_model(p_init, x=x_data)
     z1 = med - (center_pixel-1) * p.slope / contrast
     z2 = med + (num_points - center_pixel) * p.slope / contrast
     zmin = max(z1, data_min)
@@ -36,12 +42,6 @@ def zscale(imarray, contrast = 0.25, num_points = 600, num_per_row = 120):
     if zmin >= zmax:
         return data_min, data_max
     return zmin, zmax
-
-def grab_header(file):
-    hdul = fits.open(file)
-    header = hdul[0].header
-    hdul.close()
-    return header
 
 class ScalableImage(object):
     def __init__(self):
@@ -79,7 +79,6 @@ class ScalableImage(object):
         elif self.mode == 'arcsinh':
             mn = np.nanmin(data)
             mx = np.nanmax(data)
-            tmp = bytescale(data, high=1.)
             beta = np.clip(self.factor, 0., self.factor)
             sclbeta = (beta - mn) / (mx - mn)
             sclbeta = np.clip(sclbeta, 1.e-12, sclbeta)
@@ -100,7 +99,7 @@ class FitsImage(ScalableImage):
     def __init__(self, fitsfile, header = None, load = False):
         super(FitsImage, self).__init__()
         self.fitsfile = fitsfile
-        self.header = grab_header(fitsfile) if not header else header
+        self.header = header or grab_header(fitsfile)
         if load:
             self.load()
     
@@ -119,7 +118,10 @@ class FitsImage(ScalableImage):
         fits.update(self.fitsfile, self.data_array, self.header)
     
     def get_header_keyword(self, *args):
-        return [self.header.get(x, None) for x in args]
+        if len(args) > 1:
+            return [self.header.get(x, None) for x in args]
+        else:
+            return self.header.get(args[0], None)
 
 
 if __name__ == '__main__':

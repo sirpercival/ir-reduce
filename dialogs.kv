@@ -1,0 +1,378 @@
+#:import replace_nans datatypes.replace_nans
+
+<AddTarget>:
+    title: 'Add a target...'
+    auto_dismiss: False
+    size_hint: 0.7, 0.4
+    BoxLayout:
+        orientation: 'vertical'
+        ScrollView:
+            GridLayout:
+                cols: 2
+                col_default_height: '40dp'
+                Label:
+                    text: 'Target ID:'
+                TextInput:
+                    id: target_id
+                    text: ''
+                    multiline: False
+                Label:
+                    text: 'Instrument:'
+                Spinner:
+                    id: target_instrument
+                    text: 'Choose an Instrument'
+                    values: root.instrumentlist
+                Label:
+                    text: 'File #s:'
+                TextInput:
+                    id: target_files
+                    text: ''
+                    multiline: False
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '50dp'
+            Button:
+                text: 'Cancel'
+                on_press: root.dismiss()
+            Button:
+                text: 'Add'
+                on_press: root.set_target()
+
+<AlertDialog>:
+    title: 'Oops!'
+    auto_dismiss: False
+    size_hint: 0.5, 0.3
+    BoxLayout:
+        orientation: 'vertical'
+        Widget:
+        Label:
+            text: root.text
+            text_size: self.size
+            valign: 'middle'
+            halign: 'center'
+            size_hint_y: None
+            height: '30dp'
+        Widget:
+        Button:
+            size_hint_y: None
+            height: '30dp'
+            text: 'OK'
+            on_press: root.dismiss()
+
+<AssignLines>:
+    title: 'Associate calibration lines with line list'
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        Graph:
+            id: graph
+            xlabel: 'Pixel'
+            ylabel: 'Normalized Counts'
+            x_grid_label: True
+            y_grid_label: True
+            xmin: 0 if root.spectrum is None else float(root.spectrum.wav.min())
+            xmax: 100 if root.spectrum is None else float(root.spectrum.wav.max())
+            ymin: 0
+            ymax: 1
+            x_ticks_minor: 5
+            x_ticks_major: int((self.xmax - self.xmin) / 5.)
+            y_ticks_minor: 5
+            y_ticks_major: 0.2
+            label_options: {'bold': True}
+        Graph:
+            id: synth
+            xlabel: 'Wavelength'
+            ylabel: 'Normalized Strength'
+            x_grid_label: True
+            y_grid_label: True
+            xmin: root.exp_lo
+            xmax: root.exp_hi
+            ymin: 0
+            ymax: 1
+            x_ticks_minor: 5
+            x_ticks_major: (self.xmax - self.xmin) / 5.
+            y_ticks_minor: 5
+            y_ticks_major: 0.2
+            label_options: {'bold': True}
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '30dp'
+            Button:
+                text: 'Add Line'
+                on_press: root.add_line()
+            Button:
+                text: 'Next Line'
+                on_press: root.next_line()
+            Button:
+                text: 'Remove Line'
+                on_press: root.remove_line()
+            Button:
+                text: 'Cancel'
+                on_press: root.dismiss()
+            Button:
+                text: 'Done'
+                on_press: root.assign()
+
+<DefineTrace>:
+    title: 'Manually define your trace'
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        Widget:
+            id: the_widget
+            size_hint: 1, 0.9
+            canvas.before:
+                Rectangle:
+                    size: self.size
+                    pos: self.pos
+                    texture: root.imtexture
+            canvas.after:
+                Color:
+                    rgba: 1, 0, 0, 1
+        BoxLayout:
+            orientation: 'horizontal'
+            Spinner:
+                size_hint_x: 0.5
+                text: 'Choose an aperture'
+                values: ['Positive aperture %i' % x for x in range(root.npos)] + ['Negative aperture %i' % x for x in range(root.nneg)]
+                on_text: root.set_aperture(self.values.index(self.text))
+            Button:
+                size_hint_x: 0.25
+                text: 'Cancel'
+                on_press: root.dismiss()
+            Button:
+                size_hint_x: 0.25
+                text: 'Submit'
+                on_press: root.set_traces()
+
+<DirChooser>:
+    title: 'Choose a Directory'
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        FileChooserListView:
+            id: chooser
+            dirselect: True
+            multiselect: False
+            filter_dirs: True
+            filters: [root.check_dir]
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '50dp'
+            Button:
+                text: 'Cancel'
+                on_press: root.dismiss()
+            Button:
+                text: 'Select'
+                on_press: root.set_directory()
+
+<ExamineSpectrum>:
+    title: self.target.targid
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        Graph:
+            id: graph
+            xlabel: 'Pixel'
+            ylabel: 'Counts'
+            x_grid_label: True
+            y_grid_label: True
+            xlog: False
+            ylog: False
+            x_grid: False
+            y_grid: False
+            xmin: 0
+            xmax: 100 if root.spectrum is None else int(root.spectrum.size)
+            ymin: 0 if root.spectrum is None else float(root.spectrum.min())
+            ymax: 1 if root.spectrum is None else float(root.spectrum.max())
+            x_ticks_minor: 5
+            x_ticks_major: int((self.xmax - self.xmin) / 5.)
+            y_ticks_minor: 5
+            y_ticks_major: int((self.ymax - self.ymin) / 5.)
+            label_options: {'bold': True}
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '30dp'
+            Label:
+                text: 'Output filename:'
+                size_hint_x: 0.3
+                valign: 'middle'
+            TextInput:
+                id: outfile
+                multiline: False
+                text: root.outfile
+                on_focus: if not self.focus: root.outfile = self.text
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '30dp'
+            Button:
+                text: 'Discard'
+                on_press: root.dismiss()
+            Button:
+                text: 'Save to File'
+                on_press: root.save()
+
+<FitsCard>:
+    size_hint_y: None
+    height: '30dp'
+    TextInput:
+        multiline: False
+        on_text: if len(self.text) > 8: self.text = self.text[:8]
+        text: root.key
+        size_hint_x: 0.2
+    TextInput:
+        multiline: False
+        text: root.value
+        size_hint_x: 0.3
+    TextInput:
+        multiline: False
+        text: root.comment
+        size_hint_x: 0.5
+
+<FitsHeaderDialog>:
+    title: self.fitsimage.fitsfile
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'vertical'
+        ScrollView:
+            do_scroll_x: False
+            do_scroll_y: True
+            size_hint_y: 0.9
+            scroll_wheel_distance: '30dp'
+            BoxLayout:
+                id: box
+                orientation: 'vertical'
+                size_hint_y: None
+        Button:
+            text: 'Save & Close'
+            on_press: root.update_header()
+            size_hint_y: 0.1
+
+<SetFitparams>:
+    title: 'Set fit parameters'
+    auto_dismiss: False
+    size_hint: 0.7, 0.4
+    BoxLayout:
+        orientation: 'vertical'
+        ScrollView:
+            GridLayout:
+                cols: 2
+                col_default_height: '40dp'
+                Label:
+                    text: 'PSF Shape:'
+                Spinner:
+                    id: fit_psf
+                    text: 'Choose a fit shape'
+                    values: ['Gaussian','Lorentzian']
+                Label:
+                    text: 'Expected FWHM (in px):'
+                TextInput:
+                    id: fit_wid
+                    text: '5'
+                    multiline: False
+                Label:
+                    text: 'Degree of fit:'
+                TextInput:
+                    id: fit_deg
+                    text: '2'
+                    multiline: False
+                Label:
+                    text: 'Manually define trace?'
+                Spinner:
+                    id: manfit
+                    text: 'No'
+                    values: ['No','Yes']
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: '50dp'
+            Button:
+                text: 'Cancel'
+                on_press: root.dismiss()
+            Button:
+                text: 'Add'
+                on_press: root.set_fit()
+
+<TraceCheck>:
+    title: 'Fit the trace'
+    auto_dismiss: False
+    BoxLayout:
+        orientation: 'horizontal'
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_x: 0.5
+            BoxLayout:
+                orientation: 'horizontal'
+                Spinner:
+                    text: 'Choose an aperture'
+                    values: ['Positive aperture %i' % x for x in range(root.npos)] + ['Negative aperture %i' % x for x in range(root.nneg)]
+                    on_text: root.set_aperture(self.values.index(self.text))
+                    size_hint_y: 0.1
+                Label:
+                    text: 'Degree:'
+                    size_hint_x: 0.8
+                TextInput:
+                    text: root.fitdegree
+                    on_focus: if not self.focus: root.fitdegree = self.text
+                    size_hint_x: 0.4
+            Scrollview:
+                StackLayout:
+                    orientation: 'tb-lr'
+                    id: pointlist
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: 0.1
+                Button:
+                    text: 'Fit Trace'
+                    on_press: root.fit_trace
+                Button:
+                    text: 'Accept Fit'
+                    on_press: root.accept_fit
+        Graph:
+            id: fitdisplay
+            size_hint: 1, 1
+            xlabel: 'X coord'
+            ylabel: 'Y coord'
+            x_ticks_minor: 5
+            x_ticks_major: int((root.xmax - root.xmin)/5.)
+            y_ticks_minor: 5
+            y_ticks_major: int((root.ymax - root.ymin) / 5.)
+            x_grid_label: True
+            y_grid_label: True
+            xlog: False
+            ylog: False
+            x_grid: False
+            y_grid: False
+            xmin: root.wmin
+            xmax: root.wmax
+            ymin: root.dmin
+            ymax: root.dmax
+            label_options: {'bold': True}
+
+<WaitingDialog>:
+    title: 'Please Wait'
+    auto_dismiss: False
+    size_hint: 0.8, 0.8
+    BoxLayout:
+        orientation: 'vertical'
+        Widget:
+        AnchorLayout:
+            size_hint: 1, 1
+            AsyncImage:
+                id: loadimage
+                size_hint: None, None
+                size: '128dp', '128dp'
+                source: 'resources/loading_icon.gif'
+        Label:
+            size_hint_y: None
+            height: '50dp'
+            text: root.text
+            text_size: self.size
+            halign: 'center'
+            valign: 'middle'
+        Widget:
